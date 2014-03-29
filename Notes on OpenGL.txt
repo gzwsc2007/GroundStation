@@ -1,0 +1,13 @@
+2014-03-22
+
+1. Use gluPartialDisk to draw arcs
+
+2. Use glScissor to clip a region for drawing. (e.g. to limit the pitch bars in a certain rectangular area)
+
+2014-03-29
+
+How to draw rotatable fonts? - Goto Nehe's Lesson43, scroll down to the bottom of the page and find lesson43.py. In the tar ball there will be a glFreeType.py file which takes care of creating the fonts. But you should first install PIL and Pillow (from http://www.lfd.uci.edu/~gohlke/pythonlibs/). Then, instantiate the glFreeType.font_data class with the first argument being the .ttf font file and the second argument being the font size. Then, call glFreeType.glPrint(x,y,string) to print the fonts onto the screen. Note that (x,y) is relative to the bottom-left corner of the screen.
+
+Use glEnable(GL_BLEND) and glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) to enable transparency (alpha channel)
+
+Use glEnable(GL_LINE_SMOOTH) to do line antialiasing. But I still havn't found a good way to do polygon antialiasing.

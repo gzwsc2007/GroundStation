@@ -17,6 +17,7 @@ class DataInput(object):
         
         # For simulation purposes
         self.pitchUp = True
+        self.rollRight = True
         self.speedUp = True
         
         # initialize Serial com
@@ -106,18 +107,22 @@ class DataInput(object):
         randNum = random.randint(0, 100)
         
         if self.pitchUp:
-            self.readings["pitch"] += 1
-            if (self.readings["pitch"] == 90):
+            self.readings["pitch"] += 0.5
+            if (self.readings["pitch"] >= 45):
                 self.pitchUp = False
-                self.readings["roll"] += 180
+                #self.readings["roll"] += 180
         else:
-            self.readings["pitch"] -= 1
-            if (self.readings["pitch"] == -90):
+            self.readings["pitch"] -= 0.5
+            if (self.readings["pitch"] <= -45):
                 self.pitchUp = True
-                self.readings["roll"] += 180
-            
-        self.readings["roll"] += 1
-        if(self.readings["roll"] >= 180): self.readings["roll"] -= 360
+                #self.readings["roll"] += 180
+        
+        if self.rollRight:  
+            self.readings["roll"] += 0.5
+            if(self.readings["roll"] >= 45): self.rollRight = False#self.readings["roll"] -= 360
+        else:
+            self.readings["roll"] -= 0.5
+            if(self.readings["roll"] <= -45): self.rollRight = True
         
         self.readings["heading"] += 1
         if self.readings["heading"] == 360: self.readings["heading"] = 0
@@ -137,13 +142,13 @@ class DataInput(object):
                 self.speedUp = True
 
 class myThread(threading.Thread):
-    def __init__(self,GroundStation):
-        self.gndStation = GroundStation
+    def __init__(self,parent):
+        self.parent = parent
         threading.Thread.__init__(self)
         
     def run(self):
-        while(not self.gndStation.exitFlag):
+        while(not self.parent.exitFlag):
             time.sleep(0.04)
-            #self.gndStation.simulateInputs()
+            self.parent.simulateInputs()
             #if(self.gndStation.COM.inWaiting() != 0):
             #    self.gndStation.updateReadings()

@@ -7,13 +7,27 @@ import wx.lib.agw.speedmeter as SM
 
 import time,math,sys
 import AbstractModel
+import glFreeType 
 
 
 ### TODO: Think of pitch as the Phi in spherical coordinate, which has
 ### range 0 to pi (in my case -pi/2 to pi/2) !!!!!!!
 ### Model the whole airplane attitude using spherical coordinate!!!!
 
-
+# draw a rotated line. (Mainly used to draw markings on the roll ring)
+        # rotateDeg - degree
+        # lineStart - pixel
+        # lineEnd - pixel
+def drawRotatedLine(rotateDeg, lineStart, lineEnd):
+    glPushMatrix()
+    
+    glRotatef(rotateDeg,0,0,1)
+    glBegin(GL_LINES)
+    glVertex2f(0, lineStart)
+    glVertex2f(0, lineEnd)
+    glEnd()
+    
+    glPopMatrix()
 
 # Visualization of the Primary Flight Display part
 class PrimaryFlightDisplay(wx.Panel):
@@ -43,6 +57,7 @@ class PrimaryFlightDisplay(wx.Panel):
         self.spdText.SetFont(font)
         self.spdText.SetPosition((0,8))
         
+        """
         hdgBox = wx.Panel(self, size=(150,50), style=wx.SIMPLE_BORDER)
         hdgBox.SetBackgroundColour(wx.BLACK)
         hdgBox.SetPosition((self.width/2-75,self.height*5/6))
@@ -50,6 +65,7 @@ class PrimaryFlightDisplay(wx.Panel):
         self.hdgText.SetForegroundColour(wx.WHITE)
         self.hdgText.SetFont(font)
         self.hdgText.SetPosition((0,8))
+        """
         
         # A class that handles data inputs
         self.dataInput = dataInput
@@ -69,7 +85,7 @@ class PrimaryFlightDisplay(wx.Panel):
         self.canvas.Bind(wx.EVT_PAINT, self.processPaintEvent)
         
         # define parameters for drawing
-        self.pixelsPerPitch = self.height/40 # how many pixels per deg pitch
+        self.pixelsPerPitch = self.height/60 # how many pixels per deg pitch
         # by "canvas" I mean the colored part. i.e. sky and ground
         self.canvasHeight = self.pixelsPerPitch * 210
         self.canvasWidth = self.width*3/4
@@ -89,20 +105,37 @@ class PrimaryFlightDisplay(wx.Panel):
             self.OnInitGL()
             self.hasInit = True
         
-        self.OnPaint()
+        # TODO: Redraw on demand
+        self.OnAttitudePaint()
+        self.OnCompassPaint()
+        
+        self.canvas.SwapBuffers()
         event.Skip()
     
     def OnInitGL(self):
         glClearColor(1, 1, 1, 1)
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        glOrtho(-320,320,240,-240,0,1)
+        glOrtho(-self.width/2,self.width/2,self.height/2,-self.height/2,0,1)
         glMatrixMode(GL_MODELVIEW)
         glDisable(GL_DEPTH_TEST)
         glLineWidth(2)
+        self.quadric = gluNewQuadric()
+        self.quadric2 = gluNewQuadric()
+        # enable the alpha channel
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        # enable line smoothing
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_FASTEST)
+        
+        ### NOTE: the coordinate origin of the glPrint function is
+        ### at the bottom-left corner. Be aware of it !!!
+        self.myFont = glFreeType.font_data("Font.ttf", 30)
+        self.myCompassFont = glFreeType.font_data("Font.ttf", 22)
     
     ### Actually draw things here!! ###
-    def OnPaint(self):
+    def OnAttitudePaint(self):
         glClear(GL_COLOR_BUFFER_BIT)
         glLoadIdentity()
         # Rotate, and then Translate. That's what I want! #
@@ -155,30 +188,28 @@ class PrimaryFlightDisplay(wx.Panel):
             
             if drawDeg != 0:
                 ### draw the degree text ####
-                ### Using glutBitmapCharacter and manual matrix multiplication ###
-                
-                # Get the current modelview matrix
-                matrix = glGetFloatv(GL_MODELVIEW_MATRIX)
-            
+                ### Using techniques from Nehe tutorial lesson43.py ###
+                ### Need to install PIL and Pillow ###
                 glPushMatrix()
                 glLoadIdentity()
-                
-                # Calculate the abosolute coordinate after rotation
-                x,y,z,w = matrixMult(matrix, (-length-30, height, 0, 1))
-                glRasterPos(x-6,y,z)
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord('%d'%(drawDeg/10)))
-                glRasterPos(x+6,y,z)
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord('%d'%(drawDeg%10)))
-                
-                x,y,z,w = matrixMult(matrix, (length+20, height, 0, 1))
-                glRasterPos(x-6,y,z)
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord('%d'%(drawDeg/10)))
-                glRasterPos(x+6,y,z)
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord('%d'%(drawDeg%10)))
+
+                glTranslatef(centerX, centerY, 0)
+                glRotatef(-self.dataInput.readings["roll"],0,0,1)
+                glTranslatef(0, -self.dataInput.readings["pitch"]*self.pixelsPerPitch,0) 
+                glTranslatef(length+30, height-5, 0)
+                self.myFont.glPrint(0, 0, "%d"%drawDeg)
+                glTranslatef(-2*length-90, 0, 0)
+                self.myFont.glPrint(0, 0, "%d"%drawDeg)
                 
                 glPopMatrix()
         
-        glLineWidth(4)        
+        # Draw pitch bars
+        centerX = self.width/2
+        centerY = self.height/2
+        glScissor(centerX-200,centerY-190,400,380)
+        glEnable(GL_SCISSOR_TEST)
+        
+        glLineWidth(3)
         barMaxLen = 80 # max length for the white pitch bars (divisible by 4)
         for deg in xrange(25, 1151, 25): # deg*10
             if deg <= 900:
@@ -214,10 +245,46 @@ class PrimaryFlightDisplay(wx.Panel):
                     drawLine(barMaxLen/4, True)
                     # draw on the ground
                     drawLine(barMaxLen/4, False)
+        glDisable(GL_SCISSOR_TEST)
         glLineWidth(2)
         
         #### Draw Static elements ####
         glLoadIdentity()
+        
+        # Draw the roll indicator
+        glPushMatrix()
+        glRotatef(self.dataInput.readings["roll"],0,0,1)
+        ringInner = 273
+        ringOuter = 275
+        gluPartialDisk(self.quadric, ringInner, ringOuter, 20, 5, 120, 120)
+        
+        # draw markings on the roll indicator
+        glLineWidth(3)
+        drawRotatedLine(120, ringInner, ringInner + 30)
+        drawRotatedLine(135, ringInner, ringOuter + 15)
+        drawRotatedLine(150, ringInner, ringOuter + 30)
+        drawRotatedLine(160, ringInner, ringOuter + 15)
+        drawRotatedLine(170, ringInner, ringOuter + 15)
+        drawRotatedLine(190, ringInner, ringOuter + 15)
+        drawRotatedLine(200, ringInner, ringOuter + 15)
+        drawRotatedLine(210, ringInner, ringOuter + 30)
+        drawRotatedLine(225, ringInner, ringOuter + 15)
+        drawRotatedLine(240, ringInner, ringOuter + 30)
+        # draw the triangular center marking
+        glBegin(GL_TRIANGLES)
+        glVertex2f(0, -ringInner)
+        glVertex2f(-8, -ringOuter-20)
+        glVertex2f(8, -ringOuter-20)
+        glEnd()
+        
+        glPopMatrix()
+        
+        # draw the static triangle tip for roll indication
+        glBegin(GL_TRIANGLES)
+        glVertex2f(0, -ringInner)
+        glVertex2f(-10, -ringInner+22)
+        glVertex2f(10, -ringInner+22)
+        glEnd()
         
         def drawRect(x0,y0,x1,y1):
             # draw white outline
@@ -258,23 +325,67 @@ class PrimaryFlightDisplay(wx.Panel):
         drawRectNoOutline(40,-4,right,4,(0,0,0))
         drawRect(-5,-5,5,5)     # draw center dot
         
-        # TODO
-        def drawCompass():
-            # glTranslatef(xxxx) move the compass to wherever I want.
-            # glRotatef(xxxx) OFFSET rotation
-            
-            # draw the underlying circle and the outline dial ring,
-            # rotated by OFFSET degrees
-            
-            # glRotatef(xxxx) ROLL rotation
-            
-            # draw the aircraft shape thing, rotated by ROLL degree on
-            # top of OFFSET degrees.
-            
-            pass
+    # TODO
+    def OnCompassPaint(self):
+        glLoadIdentity()
 
-        self.canvas.SwapBuffers()
-    
+        # glTranslatef(xxxx) move the compass to wherever I want.
+        ringOuter = 400
+        glTranslatef(0, self.height/2 + ringOuter-80, 0)
+        
+        # draw the underlying circle and the outline dial ring,
+        # rotated by OFFSET degrees
+        glColor4f(4/255.0,65/255.0,121/255.0,128/255.0)
+        gluPartialDisk(self.quadric2, 0, ringOuter, 20, 5, 140, 80)
+        
+        # draw markings
+        glRotatef(-self.dataInput.readings["heading"], 0, 0, 1)
+        glLineWidth(2)
+        glColor3f(1,1,1)
+        degText = 0
+        for deg in xrange(0, 360, 10):
+            drawRotatedLine(180+deg, ringOuter-15, ringOuter)
+            
+        for deg in xrange(0, 360, 10):
+            drawRotatedLine(185+deg, ringOuter-5, ringOuter)
+        
+        # prepare to draw compass digits
+        glLoadIdentity()
+        glColor3f(1,1,1)
+        glTranslatef(self.width/2, -ringOuter+80, 0)
+        for deg in xrange(0, 360, 10):
+            glPushMatrix()
+            glRotatef(self.dataInput.readings["heading"]-deg, 0, 0, 1)
+            if (deg < 100): shiftLeft = -5
+            else: shiftLeft = -10
+            glTranslatef(shiftLeft, ringOuter-35, 0)
+            if (deg == 0):
+                word = "N"
+                font = self.myFont
+            elif (deg == 90):
+                word = "E"
+                font = self.myFont
+            elif (deg == 180):
+                word = "S"
+                font = self.myFont
+            elif (deg == 270):
+                word = "W"
+                font = self.myFont
+            else:
+                word = "%d"%(deg/10)
+                font = self.myCompassFont
+            font.glPrint(0,0,word)
+            glPopMatrix()
+        
+        # draw the triangular marking
+        glLoadIdentity()
+        glTranslatef(0, self.height/2 - 80, 0)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(0, 0)
+        glVertex2f(-10, -15)
+        glVertex2f(10, -15)
+        glEnd()
+        
 
 class AuxiliaryDisplay(wx.Panel):
     def __init__(self, parent, size, style, dataInput):
@@ -513,7 +624,7 @@ class GroundStationGUI(wx.Frame):
         # update altitude, heading and speed text
         self.PFD.altText.SetLabel("%3d m"%self.PFD.dataInput.altitude)
         self.PFD.spdText.SetLabel("N/A")
-        self.PFD.hdgText.SetLabel("%d Deg"%self.PFD.dataInput.readings["heading"])
+        #self.PFD.hdgText.SetLabel("%d Deg"%self.PFD.dataInput.readings["heading"])
         self.AD.mAhText.SetLabel("%4d"%self.PFD.dataInput.readings["mAh"])
         self.AD.volText.SetLabel("%4.2f"%self.PFD.dataInput.readings["voltage"])
         self.AD.tmpText.SetLabel("%3.1f"%self.PFD.dataInput.readings["temperature"])
