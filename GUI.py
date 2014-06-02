@@ -7,385 +7,17 @@ import wx.lib.agw.speedmeter as SM
 
 import time,math,sys
 import AbstractModel
-import glFreeType 
+import glFreeType
 
+import PrimaryFlightDisplay
+import NavigationDisplay
+
+# names for the ND scale choices
+ND_SCALE_CHOICE_LIST = ["30 m/div", "50 m/div", "100 m/div", "200 m/div", "500 m/div"]
 
 ### TODO: Think of pitch as the Phi in spherical coordinate, which has
 ### range 0 to pi (in my case -pi/2 to pi/2) !!!!!!!
 ### Model the whole airplane attitude using spherical coordinate!!!!
-
-# draw a rotated line. (Mainly used to draw markings on the roll ring)
-        # rotateDeg - degree
-        # lineStart - pixel
-        # lineEnd - pixel
-def drawRotatedLine(rotateDeg, lineStart, lineEnd):
-    glPushMatrix()
-    
-    glRotatef(rotateDeg,0,0,1)
-    glBegin(GL_LINES)
-    glVertex2f(0, lineStart)
-    glVertex2f(0, lineEnd)
-    glEnd()
-    
-    glPopMatrix()
-
-# Visualization of the Primary Flight Display part
-class PrimaryFlightDisplay(wx.Panel):
-    def __init__(self, parent, size, style, dataInput):
-        super(PrimaryFlightDisplay, self).__init__(parent, size=size,
-                                                   style=style)
-        
-        # the width and height of the draw-able area
-        self.width, self.height = self.GetClientSizeTuple()
-        
-        # Create widgets to display altitude and speed
-        altitudeBox = wx.Panel(self, size=(100,50), style=wx.SIMPLE_BORDER)
-        altitudeBox.SetBackgroundColour(wx.BLACK)
-        altitudeBox.SetPosition((self.width*4/5,self.height/2-25))
-        self.altText = wx.StaticText(altitudeBox,-1,size=(100,50),style=wx.ALIGN_CENTER|wx.ST_NO_AUTORESIZE)
-        self.altText.SetForegroundColour(wx.WHITE)
-        font = wx.Font(18, wx.SWISS, wx.NORMAL, wx.NORMAL)
-        font.SetWeight(wx.BOLD)
-        self.altText.SetFont(font)
-        self.altText.SetPosition((0,8))
-        
-        spdBox = wx.Panel(self, size=(100,50), style=wx.SIMPLE_BORDER)
-        spdBox.SetBackgroundColour(wx.BLACK)
-        spdBox.SetPosition((self.width/5-100,self.height/2-25))
-        self.spdText = wx.StaticText(spdBox,-1,size=(100,50),style=wx.ALIGN_CENTER|wx.ST_NO_AUTORESIZE)
-        self.spdText.SetForegroundColour(wx.WHITE)
-        self.spdText.SetFont(font)
-        self.spdText.SetPosition((0,8))
-        
-        """
-        hdgBox = wx.Panel(self, size=(150,50), style=wx.SIMPLE_BORDER)
-        hdgBox.SetBackgroundColour(wx.BLACK)
-        hdgBox.SetPosition((self.width/2-75,self.height*5/6))
-        self.hdgText = wx.StaticText(hdgBox,-1,size=(150,50),style=wx.ALIGN_CENTER|wx.ST_NO_AUTORESIZE)
-        self.hdgText.SetForegroundColour(wx.WHITE)
-        self.hdgText.SetFont(font)
-        self.hdgText.SetPosition((0,8))
-        """
-        
-        # A class that handles data inputs
-        self.dataInput = dataInput
-        self.hasInit = False
-        
-        attribList = (glcanvas.WX_GL_RGBA, # RGBA
-              glcanvas.WX_GL_DOUBLEBUFFER, # Double Buffered
-              glcanvas.WX_GL_DEPTH_SIZE, 24) # 24 bit
-
-        # Create GL Canvas
-        self.canvas = glcanvas.GLCanvas(self, attribList=attribList,
-                                        size=size)
-        self.context = glcanvas.GLContext(self.canvas)
-
-        # Bind events handlers
-        self.canvas.Bind(wx.EVT_ERASE_BACKGROUND, self.processEraseBackgroundEvent)
-        self.canvas.Bind(wx.EVT_PAINT, self.processPaintEvent)
-        
-        # define parameters for drawing
-        self.pixelsPerPitch = self.height/60 # how many pixels per deg pitch
-        # by "canvas" I mean the colored part. i.e. sky and ground
-        self.canvasHeight = self.pixelsPerPitch * 210
-        self.canvasWidth = self.width*3/4
-    
-    
-    # Do nothing, just to prevent flicker
-    def processEraseBackgroundEvent(self, event):
-        pass
-    
-    
-    # Need to be called regularly (by calling Refresh() in main timer)
-    def processPaintEvent(self, event):
-        self.canvas.SetCurrent(self.context)
-        
-        # This is the perfect time to initialize OpenGL
-        if not self.hasInit:
-            self.OnInitGL()
-            self.hasInit = True
-        
-        # TODO: Redraw on demand
-        self.OnAttitudePaint()
-        self.OnCompassPaint()
-        
-        self.canvas.SwapBuffers()
-        event.Skip()
-    
-    def OnInitGL(self):
-        glClearColor(1, 1, 1, 1)
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-        glOrtho(-self.width/2,self.width/2,self.height/2,-self.height/2,0,1)
-        glMatrixMode(GL_MODELVIEW)
-        glDisable(GL_DEPTH_TEST)
-        glLineWidth(2)
-        self.quadric = gluNewQuadric()
-        self.quadric2 = gluNewQuadric()
-        # enable the alpha channel
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        # enable line smoothing
-        glEnable(GL_LINE_SMOOTH)
-        glHint(GL_LINE_SMOOTH_HINT, GL_FASTEST)
-        
-        ### NOTE: the coordinate origin of the glPrint function is
-        ### at the bottom-left corner. Be aware of it !!!
-        self.myFont = glFreeType.font_data("Font.ttf", 30)
-        self.myCompassFont = glFreeType.font_data("Font.ttf", 22)
-    
-    ### Actually draw things here!! ###
-    def OnAttitudePaint(self):
-        glClear(GL_COLOR_BUFFER_BIT)
-        glLoadIdentity()
-        # Rotate, and then Translate. That's what I want! #
-        glRotatef(self.dataInput.readings["roll"],0,0,1)
-        # Translate along the "rotated direction"
-        glTranslatef(0, self.dataInput.readings["pitch"]*self.pixelsPerPitch,
-                     0) 
-        
-        ####################################
-        ####      Draw Stuff Here       ####
-        ####################################
-        
-        #### Draw Sky ####
-        glBegin(GL_QUADS)
-        glColor(0.00392, 0.333, 0.616)
-        glVertex2f(-self.canvasWidth, -self.canvasHeight)
-        glVertex2f(self.canvasWidth, -self.canvasHeight)
-        glVertex2f(self.canvasWidth, 0)
-        glVertex2f(-self.canvasWidth,0)
-        glEnd()
-        
-        #### Draw Ground ####
-        glBegin(GL_QUADS)
-        glColor(0.722, 0.208, 0)
-        glVertex2f(-self.canvasWidth,0)
-        glVertex2f(self.canvasWidth,0)
-        glVertex2f(self.canvasWidth,self.canvasHeight)
-        glVertex2f(-self.canvasWidth,self.canvasHeight)
-        glEnd()
-        
-        #### Draw Horizon ####
-        glBegin(GL_LINES)
-        glColor(1, 1, 1)
-        glVertex2f(-self.canvasWidth,0)
-        glVertex2f(self.canvasWidth,0)
-        glEnd()
-        
-        # to make lines thicker, use glLineWidth(2)
-        #### Draw Pitch Lines ####
-        
-        # sky is a boolean value, used to determine whether I am drawing
-        # lines in the sky or on the ground.
-        def drawLine(length, sky, drawDeg=0):
-            glBegin(GL_LINES)
-            glColor(1,1,1)
-            height = -deg*self.pixelsPerPitch/10 if sky else deg*self.pixelsPerPitch/10
-            glVertex2f(-length, height)
-            glVertex2f(length, height)
-            glEnd()
-            
-            if drawDeg != 0:
-                ### draw the degree text ####
-                ### Using techniques from Nehe tutorial lesson43.py ###
-                ### Need to install PIL and Pillow ###
-                glPushMatrix()
-                glLoadIdentity()
-
-                glTranslatef(centerX, centerY, 0)
-                glRotatef(-self.dataInput.readings["roll"],0,0,1)
-                glTranslatef(0, -self.dataInput.readings["pitch"]*self.pixelsPerPitch,0) 
-                glTranslatef(length+30, height-5, 0)
-                self.myFont.glPrint(0, 0, "%d"%drawDeg)
-                glTranslatef(-2*length-90, 0, 0)
-                self.myFont.glPrint(0, 0, "%d"%drawDeg)
-                
-                glPopMatrix()
-        
-        # Draw pitch bars
-        centerX = self.width/2
-        centerY = self.height/2
-        glScissor(centerX-200,centerY-190,400,380)
-        glEnable(GL_SCISSOR_TEST)
-        
-        glLineWidth(3)
-        barMaxLen = 80 # max length for the white pitch bars (divisible by 4)
-        for deg in xrange(25, 1151, 25): # deg*10
-            if deg <= 900:
-                if deg%100 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen, True, deg/10)
-                    # draw on the ground
-                    drawLine(barMaxLen, False, deg/10)
-                elif deg%50 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen/2, True)
-                    # draw on the ground
-                    drawLine(barMaxLen/2, False)
-                elif deg%25 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen/4, True)
-                    # draw on the ground
-                    drawLine(barMaxLen/4, False)
-            # continue to draw lines when deg > 90, to make transition better0
-            else:
-                if deg%100 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen, True, (900 - (deg - 900))/10)
-                    # draw on the ground
-                    drawLine(barMaxLen, False, (900 - (deg - 900))/10)
-                elif deg%50 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen/2, True)
-                    # draw on the ground
-                    drawLine(barMaxLen/2, False)
-                elif deg%25 == 0:
-                    # draw on the sky
-                    drawLine(barMaxLen/4, True)
-                    # draw on the ground
-                    drawLine(barMaxLen/4, False)
-        glDisable(GL_SCISSOR_TEST)
-        glLineWidth(2)
-        
-        #### Draw Static elements ####
-        glLoadIdentity()
-        
-        # Draw the roll indicator
-        glPushMatrix()
-        glRotatef(self.dataInput.readings["roll"],0,0,1)
-        ringInner = 273
-        ringOuter = 275
-        gluPartialDisk(self.quadric, ringInner, ringOuter, 20, 5, 120, 120)
-        
-        # draw markings on the roll indicator
-        glLineWidth(3)
-        drawRotatedLine(120, ringInner, ringInner + 30)
-        drawRotatedLine(135, ringInner, ringOuter + 15)
-        drawRotatedLine(150, ringInner, ringOuter + 30)
-        drawRotatedLine(160, ringInner, ringOuter + 15)
-        drawRotatedLine(170, ringInner, ringOuter + 15)
-        drawRotatedLine(190, ringInner, ringOuter + 15)
-        drawRotatedLine(200, ringInner, ringOuter + 15)
-        drawRotatedLine(210, ringInner, ringOuter + 30)
-        drawRotatedLine(225, ringInner, ringOuter + 15)
-        drawRotatedLine(240, ringInner, ringOuter + 30)
-        # draw the triangular center marking
-        glBegin(GL_TRIANGLES)
-        glVertex2f(0, -ringInner)
-        glVertex2f(-8, -ringOuter-20)
-        glVertex2f(8, -ringOuter-20)
-        glEnd()
-        
-        glPopMatrix()
-        
-        # draw the static triangle tip for roll indication
-        glBegin(GL_TRIANGLES)
-        glVertex2f(0, -ringInner)
-        glVertex2f(-10, -ringInner+22)
-        glVertex2f(10, -ringInner+22)
-        glEnd()
-        
-        def drawRect(x0,y0,x1,y1):
-            # draw white outline
-            glColor(1,1,1)
-            glBegin(GL_QUADS)
-            glVertex2f(x0,y0)
-            glVertex2f(x1,y0)
-            glVertex2f(x1,y1)
-            glVertex2f(x0,y1)
-            glEnd()
-            # draw black body
-            glColor(0,0,0)
-            glBegin(GL_QUADS)
-            glVertex2f(x0+1,y0+1)
-            glVertex2f(x1-1,y0+1)
-            glVertex2f(x1-1,y1-1)
-            glVertex2f(x0+1,y1-1)
-            glEnd()
-        
-        def drawRectNoOutline(x0, y0, x1, y1, RGB):
-            glColor(RGB[0],RGB[1],RGB[2])
-            glBegin(GL_QUADS)
-            glVertex2f(x0+1,y0+1)
-            glVertex2f(x1-1,y0+1)
-            glVertex2f(x1-1,y1-1)
-            glVertex2f(x0+1,y1-1)
-            glEnd()
-        
-        #### Draw attitude reference ####
-        # left and right limit of the whole reference bar
-        left = -self.width/5
-        right = self.width/5
-        drawRect(left,-4,-40,4) # draw left bar
-        drawRect(-48, -4, -40, (-left+40)/10) # draw left vertical bar
-        drawRectNoOutline(left,-4,-40,4,(0,0,0))
-        drawRect(40,-4,right,4) # draw right bar
-        drawRect(40, -4, 48, (right+40)/10) # draw left vertical bar
-        drawRectNoOutline(40,-4,right,4,(0,0,0))
-        drawRect(-5,-5,5,5)     # draw center dot
-        
-    # TODO
-    def OnCompassPaint(self):
-        glLoadIdentity()
-
-        # glTranslatef(xxxx) move the compass to wherever I want.
-        ringOuter = 400
-        glTranslatef(0, self.height/2 + ringOuter-80, 0)
-        
-        # draw the underlying circle and the outline dial ring,
-        # rotated by OFFSET degrees
-        glColor4f(4/255.0,65/255.0,121/255.0,128/255.0)
-        gluPartialDisk(self.quadric2, 0, ringOuter, 20, 5, 140, 80)
-        
-        # draw markings
-        glRotatef(-self.dataInput.readings["heading"], 0, 0, 1)
-        glLineWidth(2)
-        glColor3f(1,1,1)
-        degText = 0
-        for deg in xrange(0, 360, 10):
-            drawRotatedLine(180+deg, ringOuter-15, ringOuter)
-            
-        for deg in xrange(0, 360, 10):
-            drawRotatedLine(185+deg, ringOuter-5, ringOuter)
-        
-        # prepare to draw compass digits
-        glLoadIdentity()
-        glColor3f(1,1,1)
-        glTranslatef(self.width/2, -ringOuter+80, 0)
-        for deg in xrange(0, 360, 10):
-            glPushMatrix()
-            glRotatef(self.dataInput.readings["heading"]-deg, 0, 0, 1)
-            if (deg < 100): shiftLeft = -5
-            else: shiftLeft = -10
-            glTranslatef(shiftLeft, ringOuter-35, 0)
-            if (deg == 0):
-                word = "N"
-                font = self.myFont
-            elif (deg == 90):
-                word = "E"
-                font = self.myFont
-            elif (deg == 180):
-                word = "S"
-                font = self.myFont
-            elif (deg == 270):
-                word = "W"
-                font = self.myFont
-            else:
-                word = "%d"%(deg/10)
-                font = self.myCompassFont
-            font.glPrint(0,0,word)
-            glPopMatrix()
-        
-        # draw the triangular marking
-        glLoadIdentity()
-        glTranslatef(0, self.height/2 - 80, 0)
-        glBegin(GL_LINE_LOOP)
-        glVertex2f(0, 0)
-        glVertex2f(-10, -15)
-        glVertex2f(10, -15)
-        glEnd()
-        
 
 class AuxiliaryDisplay(wx.Panel):
     def __init__(self, parent, size, style, dataInput):
@@ -539,19 +171,7 @@ class AuxiliaryDisplay(wx.Panel):
         self.mAhIndicator.DrawExternalArc(False)
         self.mAhIndicator.SetSpeedBackground(self.GetBackgroundColour())
         
-        
-# Visualization of the Nautical Display part
-class NauticalDisplay(wx.Panel):
-    def __init__(self, parent, size, style, dataInput):
-        wx.Panel.__init__(self, parent, size=size, style=style)
-        
-        ### TODO: Remove me!! I am temp !!! ###
-        text = wx.StaticText(self, -1, "\n\n\n\n\nUnder Construction", size=size,
-                             style=wx.ALIGN_CENTER|wx.ST_NO_AUTORESIZE)
-        text.SetFont(wx.Font(18, wx.SWISS, wx.NORMAL, wx.NORMAL))
-    
-    # Do other stuff here
-    
+
 
 # The overall GUI that integrates several parts to a whole.
 class GroundStationGUI(wx.Frame):
@@ -563,47 +183,71 @@ class GroundStationGUI(wx.Frame):
                           wx.CLIP_CHILDREN)
         
         # Setting up the menu object
-        Settingmenu = wx.Menu() # The abstract menu
+        LogMenu = wx.Menu() # The abstract menu
+        LogMenu.Append(101, "Start/Stop Log", "Start or Stop logging data", wx.ITEM_CHECK)
         
         # Creating the menu bar
         menuBar = wx.MenuBar() # The visible menu bar
-        menuBar.Append(Settingmenu, "&Settings")
+        menuBar.Append(LogMenu, "&Log")
+
         self.SetMenuBar(menuBar)
         
         # create the underlying panel
         bgPanel = wx.Panel(self)
+
+        # create a button to reset the altitude offset
+        buttonAltReset = wx.Button(bgPanel, 1, "Abs/Rel Altitude")
+        # create a button to set HOME
+        buttonSetHome = wx.Button(bgPanel, 2, "SetHome")
+        # create a button to reset airspeed
+        buttonAspdReset = wx.Button(bgPanel, 3, "Reset Airspeed")
         
+        # create a choice menu to select scale for the Navigation Display
+        scaleChoice = wx.Choice(bgPanel, 1, name="Scale", choices=ND_SCALE_CHOICE_LIST)
+        scaleChoice.SetSelection(1) # default 30 m/div
+
         # create a custom panel for Primary Flight Display
-        self.PFD = PrimaryFlightDisplay(bgPanel, size=(800,600),
+        self.PFD = PrimaryFlightDisplay.PrimaryFlightDisplay(bgPanel,
+                                        size=(800,850),
                                         style=wx.SIMPLE_BORDER,
                                         dataInput=dataInput)
-        boxPFD = wx.StaticBox(bgPanel, -1, "Primary Flight Display",size=(800,600))
+        boxPFD = wx.StaticBox(bgPanel, -1, "Primary Flight Display",size=(800,850))
         boxPFDSizer = wx.StaticBoxSizer(boxPFD, wx.VERTICAL)
         boxPFDSizer.Add(self.PFD, 0, wx.EXPAND|wx.ALL, border=5)
         
         # create a custom panel for Auxilary readings Display
-        self.AD = AuxiliaryDisplay(bgPanel, size=(800,120), style=wx.SIMPLE_BORDER,
+        self.AD = AuxiliaryDisplay(bgPanel, size=(800,100), style=wx.SIMPLE_BORDER,
                                    dataInput=dataInput)
-        boxPFDSizer.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=5)
         
-        # create a custom panel for Nautical Display
-        self.ND = NauticalDisplay(bgPanel, size=(800,600),
-                                  style=wx.SIMPLE_BORDER,
-                                  dataInput=dataInput)
-        boxND = wx.StaticBox(bgPanel, -1, "Nautical Display", size=(800,600))
+        # create a custom panel for Navigation Display
+        self.ND = NavigationDisplay.NavigationDisplay(bgPanel, size=(800,600),
+                                                      style=wx.SIMPLE_BORDER,
+                                                      dataInput=dataInput)
+        boxND = wx.StaticBox(bgPanel, -1, "Navigation Display", size=(800,600))
         boxNDSizer = wx.StaticBoxSizer(boxND, wx.VERTICAL)
         boxNDSizer.Add(self.ND, 0, wx.EXPAND|wx.ALL, border=5)
-        
-        # create a button to reset the altitude offset
-        buttonAltReset = wx.Button(bgPanel, 1, "Abs/Rel Altitude")
+
+        hbtnSizer = wx.BoxSizer(wx.HORIZONTAL)
+        hbtnSizer.Add(buttonAltReset, 0, wx.ALL, border=5)
+        hbtnSizer.Add(buttonAspdReset, 0, wx.ALL, border=5)
+        hbtnSizer.Add(buttonSetHome, 0, wx.ALL, border=5)
+        hbtnSizer.Add(scaleChoice, 0, wx.ALL, border=5)
+
+        boxNDSizer.Add(hbtnSizer, 0, wx.ALL, border=0)
+        boxNDSizer.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=5)
         
         self.Bind(wx.EVT_BUTTON, self.OnClick, buttonAltReset)
+        self.Bind(wx.EVT_BUTTON, self.OnClick, buttonAspdReset)
+        self.Bind(wx.EVT_BUTTON, self.OnClick, buttonSetHome)
         self.Bind(wx.EVT_CLOSE, self.OnClose)
+        self.Bind(wx.EVT_CHOICE, self.OnChoice, scaleChoice)
+
+        # bind menu items
+        self.Bind(wx.EVT_MENU, self.OnLogClick, id=101)
         
         # sizers for overall layout
         v2sizer = wx.BoxSizer(wx.VERTICAL)
         v2sizer.Add(boxNDSizer, 0, wx.ALL, border=5)
-        v2sizer.Add(buttonAltReset, 0, wx.ALL, border=5)
         hsizer = wx.BoxSizer(wx.HORIZONTAL)
         hsizer.Add(boxPFDSizer, 0, wx.ALL, border=5) # Set border width between ND and PFD
         hsizer.Add(v2sizer, 0, wx.ALL, border=5)
@@ -619,28 +263,40 @@ class GroundStationGUI(wx.Frame):
         self.Bind(wx.EVT_TIMER, self.OnTimer, self.timer)
         self.timer.Start(30) # ms
     
+    def OnLogClick(self, evt):
+        if (evt.IsChecked()): self.PFD.dataInput.startLogging()
+        else: self.PFD.dataInput.stopLogging()
+
+
+    def OnChoice(self, evt):
+        evt_ID = evt.GetId()
+        choice = evt.GetEventObject().GetCurrentSelection()
+
+        if (evt_ID == 1): # select ND scale
+            self.ND.setScale(choice)
+
     def OnTimer(self, event):
         self.PFD.Refresh()
+        self.ND.Refresh()
         # update altitude, heading and speed text
-        self.PFD.altText.SetLabel("%3d m"%self.PFD.dataInput.altitude)
-        self.PFD.spdText.SetLabel("N/A")
-        #self.PFD.hdgText.SetLabel("%d Deg"%self.PFD.dataInput.readings["heading"])
-        self.AD.mAhText.SetLabel("%4d"%self.PFD.dataInput.readings["mAh"])
-        self.AD.volText.SetLabel("%4.2f"%self.PFD.dataInput.readings["voltage"])
-        self.AD.tmpText.SetLabel("%3.1f"%self.PFD.dataInput.readings["temperature"])
+        #self.PFD.altText.SetLabel("%3d m"%self.PFD.dataInput.data["altitude"])
+        #self.PFD.spdText.SetLabel("%2d m/s"%self.PFD.dataInput.data["airspeed"])
+        self.AD.mAhText.SetLabel("%4d"%self.PFD.dataInput.data["mAh"])
+        self.AD.volText.SetLabel("%4.2f"%self.PFD.dataInput.data["battV"])
+        self.AD.tmpText.SetLabel("%3.1f"%self.PFD.dataInput.data["temperature"])
         # update amperemeter reaidng
-        self.AD.crtMeter.SetSpeedValue(self.PFD.dataInput.readings["current"])
+        self.AD.crtMeter.SetSpeedValue(self.PFD.dataInput.data["battI"])
         # update mah reading
-        self.AD.mAhIndicator.SetSpeedValue(self.PFD.dataInput.readings["mAh"]*4.0/self.PFD.dataInput.batt_capacity)
+        self.AD.mAhIndicator.SetSpeedValue(self.PFD.dataInput.data["mAh"]*4.0/self.PFD.dataInput.batt_capacity)
         # update voltage text color
-        if (self.PFD.dataInput.readings["voltage"] - 11.20 <= 0):
+        if (self.PFD.dataInput.data["battV"] - 15.00 <= 0):
             self.AD.volText.SetForegroundColour(wx.RED)
         else:
             self.AD.volText.SetForegroundColour(wx.GREEN)
     
     def OnClick(self, event):
         id = event.GetId()
-        if (id == 1):
+        if (id == 1): # altitude reset
             # switch between absolute and relative altitude
             if(self.PFD.dataInput.EN_ALT_OFFSET == False):
                 self.PFD.dataInput.altitudeOffset = self.PFD.dataInput.altitude
@@ -648,20 +304,35 @@ class GroundStationGUI(wx.Frame):
             else:
                 self.PFD.dataInput.altitudeOffset = 0
                 self.PFD.dataInput.EN_ALT_OFFSET = False
+        elif (id == 2): # set home
+            # set HOME
+            if (self.PFD.dataInput.beaconCoords == []):
+                self.PFD.dataInput.beaconCoords.append((self.PFD.dataInput.data["longitude"], \
+                                                  self.PFD.dataInput.data["latitude"]))
+            else:
+                self.PFD.dataInput.beaconCoords[0] = (self.PFD.dataInput.data["longitude"], \
+                                                      self.PFD.dataInput.data["latitude"])
+            if (self.PFD.dataInput.beacons == []):
+                self.PFD.dataInput.beacons.append(["HOME", 0, 0])
+
+            self.PFD.dataInput.updateBeacons()
+        elif (id == 3): # airspeed reset
+            self.PFD.dataInput.aspdOffset = self.PFD.dataInput.data["airspeed"] + self.PFD.dataInput.aspdOffset
     
     def OnClose(self, event):
         self.PFD.dataInput.exitFlag = True
         self.timer.Stop()
+        if (self.PFD.dataInput.logEnable): self.PFD.dataInput.stopLogging()
         self.Destroy()
 
-# Note: OpenGL matrix is column major
-def matrixMult(m, v):
-    r = [0,0,0,0]
-    r[0] = m[0][0]*v[0]+m[1][0]*v[1]+m[2][0]*v[2]+m[3][0]*v[3]
-    r[1] = m[0][1]*v[0]+m[1][1]*v[1]+m[2][1]*v[2]+m[3][1]*v[3]
-    r[2] = m[0][2]*v[0]+m[1][2]*v[1]+m[2][2]*v[2]+m[3][2]*v[3]
-    r[3] = m[0][3]*v[0]+m[1][3]*v[1]+m[2][3]*v[2]+m[3][3]*v[3]
-    return r[0],r[1],r[2],r[3]
+# Note: OpenGL matrix is column major. (Deprecated)
+#def matrixMult(m, v):
+#    r = [0,0,0,0]
+#    r[0] = m[0][0]*v[0]+m[1][0]*v[1]+m[2][0]*v[2]+m[3][0]*v[3]
+#    r[1] = m[0][1]*v[0]+m[1][1]*v[1]+m[2][1]*v[2]+m[3][1]*v[3]
+#    r[2] = m[0][2]*v[0]+m[1][2]*v[1]+m[2][2]*v[2]+m[3][2]*v[3]
+#    r[3] = m[0][3]*v[0]+m[1][3]*v[1]+m[2][3]*v[2]+m[3][3]*v[3]
+#    return r[0],r[1],r[2],r[3]
 
 app = wx.App(False)
 dataInput = AbstractModel.DataInput()

@@ -1,0 +1,22 @@
+Data Used by Primary Flight Display
+
+Data			Unit		Rate
+
+Roll 			[deg]		25Hz
+Pitch 			[deg]		25Hz
+Magnetic Heading 	[deg]		25Hz
+Altitude 		[m]		25Hz
+Airspeed 		[m/s]		25Hz
+Battery Voltage 	[V]		5Hz
+Battery Current 	[A]		5Hz
+Cabin Temperature 	[Celcius]	5Hz
+
+Data Used by Navigation Display
+
+Latitude		[deg, N/S]	5Hz
+Longitude		[deg, E/W]	5Hz
+Course Heading		[deg]		5Hz
+Ground Speed		[m/s]		5Hz
+
+
+Should use MavLink to send the above data. There should be 2 packets, one sent at 25Hz and the other at 5Hz.

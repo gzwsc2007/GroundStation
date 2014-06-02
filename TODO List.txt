@@ -1,0 +1,32 @@
+Note: The dates denote the time when I added TODO items, not the time when I completed them.
+
+2014-04-11
+
+- Learn how to use Stencil buffer test in order to build the Navigation Display. [Done on 05-03]
+
+- Learn about the Python Interface of MavLink. [Done on 05-04. Look at testMavlink.py]
+
+2014-05-04
+
+- Add Altitude sliding bar as well as airspeed sliding bar.
+
+- Implement an algorithm to calibrate the magnetometer.
+
+- Buy a bi-directional logic converter to interface with the ADS1115. (Because it runs on 5V, its Vih is greater than 3.3V, so I can't connect its I2C interface directly to the STM32)
+
+- Decrease the length of the wires that run from the STM32 to the onboard NRF24L01 module.
+
+- WHY?!! Why when I set the thread_delay to 30ms in Telemetry.c, then my I2C_read_noack will break?!?!?? 
+[Done on 05-05. The I2C functions are very delicate, they must no be interrupted by anything. So, to be safe, I call rt_hw_interrupt_disable() inside I2C_read_noack to protect the access. In this way, neither the scheduler nor IRQ will be triggered. Haha, it works so smoothly now!]
+[Big Lesson, the process of receiving one byte is NOT interruptable!]
+
+2014-05-05
+
+- adapt the STM32 code to use my custom MAVLink message. [almost done]
+
+- Don't update graphics constantly, but update them on demand.
+
+2014-05-13
+
+- Optimize my application by using glDrawElements instead of calling glBegin everytime.
+- Implement a stencil buffer on the PFD
