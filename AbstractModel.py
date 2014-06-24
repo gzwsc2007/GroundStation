@@ -207,19 +207,22 @@ class DataInput(object):
         #self.data["longitude"] += 0.0000005
 
     def startLogging(self):
+        print "start logging"
         self.logList = []
         self.logEnable = True
         self.lastLogTime = time.time()
 
     def stopLogging(self):
+        print "stop logging. List length: ",
+        print len(self.logList)
         self.logEnable = False
-        f = open("log.pkl", "w+")
+        f = open("log_%s.pkl"%time.strftime("%Y-%m-%d_%H_%M_%S"), "w+")
         pickle.dump(self.logList, f)
 
     def doLog(self):
         if (self.logEnable):
             tnow = time.time()
-            if (tnow - self.lastLogTime >= 2000.0):
+            if (tnow - self.lastLogTime >= 0.05):
                 self.logList.append((tnow, copy.deepcopy(self.data)))
                 self.lastLogTime = tnow
 

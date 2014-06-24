@@ -153,12 +153,12 @@ class MAVLink_navd_message(MAVLink_message):
                 self.groundspeed = groundspeed
 
         def pack(self, mav):
-                return MAVLink_message.pack(self, mav, 198, struct.pack('<iihhhhh', self.latitude, self.longitude, self.battV, self.battI, self.temp, self.course, self.groundspeed))
+                return MAVLink_message.pack(self, mav, 86, struct.pack('<iihhhHH', self.latitude, self.longitude, self.battV, self.battI, self.temp, self.course, self.groundspeed))
 
 
 mavlink_map = {
         MAVLINK_MSG_ID_PFD : ( '<hhhhh', MAVLink_pfd_message, [0, 1, 2, 3, 4], 21 ),
-        MAVLINK_MSG_ID_NAVD : ( '<iihhhhh', MAVLink_navd_message, [2, 3, 4, 0, 1, 5, 6], 198 ),
+        MAVLINK_MSG_ID_NAVD : ( '<iihhhHH', MAVLink_navd_message, [2, 3, 4, 0, 1, 5, 6], 86 ),
 }
 
 class MAVError(Exception):
@@ -402,8 +402,8 @@ class MAVLink(object):
                 temp                      : Cabin Temperature in 0.1 Celcius. (int16_t)
                 latitude                  : Latitude (WGS84), in 10^-7 degrees. (int32_t)
                 longitude                 : Longitude (WGS84), in 10^-7 degrees. (int32_t)
-                course                    : Course heading in 0.01 degrees. (int16_t)
-                groundspeed               : groundspeed in 0.1 m/s. (int16_t)
+                course                    : Course heading in 0.01 degrees. (uint16_t)
+                groundspeed               : groundspeed in 0.0001 m/s. (uint16_t)
 
                 '''
                 msg = MAVLink_navd_message(battV, battI, temp, latitude, longitude, course, groundspeed)
@@ -420,8 +420,8 @@ class MAVLink(object):
                 temp                      : Cabin Temperature in 0.1 Celcius. (int16_t)
                 latitude                  : Latitude (WGS84), in 10^-7 degrees. (int32_t)
                 longitude                 : Longitude (WGS84), in 10^-7 degrees. (int32_t)
-                course                    : Course heading in 0.01 degrees. (int16_t)
-                groundspeed               : groundspeed in 0.1 m/s. (int16_t)
+                course                    : Course heading in 0.01 degrees. (uint16_t)
+                groundspeed               : groundspeed in 0.0001 m/s. (uint16_t)
 
                 '''
                 return self.send(self.navd_encode(battV, battI, temp, latitude, longitude, course, groundspeed))

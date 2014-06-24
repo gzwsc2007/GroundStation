@@ -61,7 +61,7 @@ class NavigationDisplay(wx.Panel):
         self.pixelsPerMeter = self.ringMarginPix / self.scales[self.scaleSelect]
         self.maxDistance = self.scales[self.scaleSelect] * 3
         
-        self.groundspeedUnit = METER_PER_SECOND
+        self.groundspeedUnit = KM_PER_HOUR
 
     def setScale(self, scale):
         self.scaleSelect = scale
@@ -148,9 +148,9 @@ class NavigationDisplay(wx.Panel):
         glTranslatef(35, 0, 0)
         glColor(104/255.0, 202/255.0, 93/255.0)
         if self.groundspeedUnit == METER_PER_SECOND:
-            self.myFont.glPrint(0,0,"%2.1f"%(self.dataInput.data["groundspeed"]/10.0))
+            self.myFont.glPrint(0,0,"%2.1f"%(self.dataInput.data["groundspeed"]))
         elif self.groundspeedUnit == KM_PER_HOUR:
-            mpers = self.dataInput.data["groundspeed"]/10.0
+            mpers = self.dataInput.data["groundspeed"]
             kmh = 3.6 * mpers
             self.myFont.glPrint(0,0,"%d"%kmh)
         glTranslatef(332, 5, 0) # bad style. Magic number

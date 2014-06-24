@@ -8,7 +8,7 @@ Note: The dates denote the time when I added TODO items, not the time when I com
 
 2014-05-04
 
-- Add Altitude sliding bar as well as airspeed sliding bar.
+- Add Altitude sliding bar as well as airspeed sliding bar. [Done]
 
 - Implement an algorithm to calibrate the magnetometer.
 
@@ -30,3 +30,9 @@ Note: The dates denote the time when I added TODO items, not the time when I com
 
 - Optimize my application by using glDrawElements instead of calling glBegin everytime.
 - Implement a stencil buffer on the PFD
+
+2014-06-08
+
+- solve the Logger bug [Done]
+- Add vertical speed indicator
+- Check GPS ground speed [Done]
