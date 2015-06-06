@@ -47,10 +47,10 @@ class NavigationDisplay(wx.Panel):
         self.canvas.Bind(wx.EVT_PAINT, self.processPaintEvent)
 
         # distance (in pixels) between the white rings
-        self.ringMarginPix = 110
+        self.ringMarginPix = 85
 
         # offset of the concentric center of the circles
-        self.shiftDown = 100
+        self.shiftDown = 0
 
         ################ Customizable Settings ###############
 
@@ -130,6 +130,7 @@ class NavigationDisplay(wx.Panel):
         glEnd()
 
         # draw the Course-Over-Ground box and digits
+        '''
         glTranslatef(0, -self.hheight, 0)
         glLineWidth(2)
         glBegin(GL_LINE_STRIP)
@@ -139,6 +140,7 @@ class NavigationDisplay(wx.Panel):
         glVertex2f(30, 30)
         glVertex2f(30, 0)
         glEnd()
+        '''
 
         # draw the Ground Speed (GS) text and COG text
         glLoadIdentity()
@@ -153,18 +155,20 @@ class NavigationDisplay(wx.Panel):
             mpers = self.dataInput.data["groundspeed"]
             kmh = 3.6 * mpers
             self.myFont.glPrint(0,0,"%d"%kmh)
+        '''
         glTranslatef(332, 5, 0) # bad style. Magic number
         glColor(1, 1, 1)
-        self.myCompassFont.glPrint(0, 0, "%03d"%self.dataInput.data["course"])
-
+        self.myCompassFont.glPrint(0, 0, "%03d"%self.dataInput.homeBearing)
+        '''
 
         # move a little bit down
         glLoadIdentity()
         shiftDown = self.shiftDown
         glTranslate(0, shiftDown, 0)
 
+        # draw the green forward arrow
         radius = self.ringMarginPix * 3 # radius of the outmost ring
-        glColor(104/255.0, 202/255.0, 93/255.0)
+        glColor(104/255.0, 202/255.0, 93/255.0, 0.5)
         glLineWidth(1)
         glBegin(GL_LINES)
         glVertex2f(0, 0)
@@ -175,6 +179,14 @@ class NavigationDisplay(wx.Panel):
         glVertex2f(0, -radius)
         glVertex2f(-10, -radius + 15)
         glVertex2f(10, -radius + 15)
+        glEnd()
+        glColor(1, 1, 1)
+        # draw the HOME mark
+        glBegin(GL_QUADS)
+        glVertex2f(0, -5)
+        glVertex2f(5, 0)
+        glVertex2f(0, 5)
+        glVertex2f(-5, 0)
         glEnd()
 
         # setup Stencil Buffer to limit drawing area to be inside the outer
@@ -193,10 +205,10 @@ class NavigationDisplay(wx.Panel):
 
         # draw the out most ring
         glColor(1, 1, 1)
-        gluPartialDisk(self.quadric, radius, radius+1, 45, 1, 30, 300)
+        gluPartialDisk(self.quadric, radius, radius+1, 45, 1, 0, 360)
 
         # draw the markings on the outer ring
-        glRotatef(-self.dataInput.data["course"], 0, 0, 1)
+        glRotatef(-self.dataInput.homeBearing, 0, 0, 1)
         for deg in xrange(0, 360, 10):
             drawRotatedLine(180+deg, radius+14, radius)
             
@@ -208,11 +220,11 @@ class NavigationDisplay(wx.Panel):
         glTranslatef(self.hwidth, self.hheight-shiftDown, 0)
         for deg in xrange(0, 360, 30):
             glPushMatrix()
-            glRotatef(self.dataInput.data["course"]-deg, 0, 0, 1)
+            glRotatef(self.dataInput.homeBearing-deg, 0, 0, 1)
             if (deg < 100): shiftLeft = -8
             else: shiftLeft = -10
             glTranslatef(shiftLeft, radius+20, 0)
-            glColor(250/255.0, 246/255.0, 90/255.0) # yellow for letters
+            glColor(68/255.0, 176/255.0, 248/255.0) # blue for letters
             if (deg == 0):
                 word = "N"
                 font = self.myFont
@@ -246,9 +258,6 @@ class NavigationDisplay(wx.Panel):
         radius1 = self.ringMarginPix * 2
         gluPartialDisk(self.quadric, radius1, radius1+1, 40, 1, 0, 360)
 
-        # draw beacons
-        self.drawBeaconList()
-
         # draw the scale text on the rings
         glLoadIdentity()
         glColor(0, 0, 0)
@@ -276,27 +285,37 @@ class NavigationDisplay(wx.Panel):
         self.myCompassFont.glPrint(0, 0, 
             "%d"%(2*self.scales[self.scaleSelect]))
 
+        # draw beacons
+        self.drawBeaconList()
+
+        glDisable(GL_STENCIL_TEST)
+
+    # draw the aircraft beacon
+    def drawAircraft(self, x, y):
+        rotate = self.dataInput.data["course"] - self.dataInput.homeBearing
+        rotate = (rotate + 360) % 360
+
         # draw the yellow aircraft shape
         glColor(250/255.0, 246/255.0, 90/255.0)
         glLineWidth(3)
         glLoadIdentity()
-        glTranslatef(0, shiftDown, 0)
+        glTranslatef(0, self.shiftDown, 0)
+        glTranslatef(x, y, 0)
+        glRotatef(rotate, 0, 0, 1)
         glBegin(GL_LINES)
         glVertex2f(0, 15)
         glVertex2f(0, -15)
         glEnd()
         glBegin(GL_LINES)
-        glVertex2f(-15, -3)
-        glVertex2f(15, -3)
+        glVertex2f(-17, -3)
+        glVertex2f(17, -3)
         glEnd()
         glBegin(GL_LINES)
-        glVertex2f(-7, 12)
-        glVertex2f(7, 12)
+        glVertex2f(-8, 12)
+        glVertex2f(8, 12)
         glEnd()
 
-        glDisable(GL_STENCIL_TEST)
-
-    # x,y is relative to the shifted origin (the yellow aircraft)
+    # x,y is relative to the shifted origin (HOME)
     # pos-x is right and pos-y is down
     def drawBeacon(self, x, y, text, outOfBound=False):
         glLoadIdentity()
@@ -326,6 +345,7 @@ class NavigationDisplay(wx.Panel):
     # still be displayed at the edge of the map, but the color will change to yellow.
     def drawBeaconList(self):
         if self.dataInput.beacons != []:
+            i = 0
             for b in self.dataInput.beacons:
                 # direction is in degrees. 0 points forward and CW is positive
                 # distance is in meters
@@ -337,4 +357,9 @@ class NavigationDisplay(wx.Panel):
                     outOfBound = True
                 x = math.sin(direction) * distance * self.pixelsPerMeter
                 y = -math.cos(direction) * distance * self.pixelsPerMeter
-                self.drawBeacon(x, y, name, outOfBound)
+                if (i == 0):
+                    self.drawAircraft(x, y)
+                else:
+                    self.drawBeacon(x, y, name, outOfBound)
+
+                i += 1

@@ -216,3 +216,7 @@ pip-log.txt
 
 # compiled python file
 .pyc
+
+# ignore flight log and misc
+misc/
+flight_log/

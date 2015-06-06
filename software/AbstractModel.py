@@ -10,7 +10,7 @@ import serial
 import pickle
 import copy
 
-import customMavlinkv10
+import MAVLink.MAVLink as MAVLink
 
 
 class DataInput(object):
@@ -37,33 +37,38 @@ class DataInput(object):
                     "course":0, # [0, 360) degrees
                     "groundspeed":0, # m/s
                     # local data
-                    "mAh":0
+                    "mAh":0,
+                    "verticalspeed":0
                     }
-        
-        # A list of beacon coordinates. 
+
+        # A list of beacon coordinates.
         # These beacons will be displayed on the Navigation Display
-        self.beaconCoords = [] # beacon GPS coords: (long, lat) tuples
-        self.beacons = [] # converted format of beacons: [name, dir, distance] sub-lists
+        self.homeCoordRad = (0, 0) # (long, lat) tuple
+        self.homeCoordDeg = (0, 0)
+        self.homeBearing = 0 # heading of the ground station
+        self.beaconCoords = [(0, 0)] # beacon GPS coords: (long, lat) tuples. index 0 is the craft position
+        self.beacons = [["Craft", 0, 0]] # converted format of beacons: [name, dir, distance] sub-lists
 
         # For simulation purposes
         self.pitchUp = True
         self.rollRight = True
         self.speedUp = True
-        
+
         # initialize Serial com
-        #self.COM = serial.Serial(2,115200) # COM3
-        #self.COM.flushInput() # flush input buffer
-        
+        self.COM = serial.Serial(1,115200*2) # COM2
+        self.COM.flushInput() # flush input buffer
+
         self.altitude = 0
         self.altitudeOffset = 0
         self.aspdOffset = 0
-        self.batt_capacity = 2200    # default battery capacity 2200 mAh
+        self.batt_capacity = 5000    # default battery capacity 5000 mAh
         self.volt_last = 0
         self.curr_last = 0
         self.roll_last = 0
         self.pitch_last = 0
-        self.timeLast = time.time()
-        
+        self.vs_last = 0
+        self.timeLast = 0
+
         self.EN_ALT_OFFSET = False # enable relative altitude mode
         self.LPF = True # enable local Low-Pass-Filter
         self.first5HzSample = True
@@ -72,18 +77,19 @@ class DataInput(object):
         self.logEnable = False
         thread = myThread(self)
         thread.start()
-    
+
     # update the beacons list based on current position & heading of the aircraft
     # Source: www.movable-type.co.uk/scripts/latlong.html
     def updateBeacons(self):
-        lat0, lon0 = math.radians(self.data["latitude"]), math.radians(self.data["longitude"])
-        
+        lon0, lat0 = self.homeCoordRad
+        self.beaconCoords[0] = (self.data["longitude"], self.data["latitude"])
+
         i = 0
         for coord in self.beaconCoords:
             # calculate distance
             lat, lon = math.radians(coord[1]), math.radians(coord[0])
-            dlat = math.radians(coord[1] - self.data["latitude"])
-            dlon = math.radians(coord[0] - self.data["longitude"])
+            dlat = math.radians(coord[1] - self.homeCoordDeg[1])
+            dlon = math.radians(coord[0] - self.homeCoordDeg[0])
             a = (math.sin(dlat / 2.0)) ** 2 + math.cos(lat0) * math.cos(lat) * ((math.sin(dlon / 2.0)) ** 2)
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
             d = 6375000 * c # earth's mean radius is 6371 km
@@ -94,7 +100,7 @@ class DataInput(object):
             brng = math.degrees(math.atan2(y, x))
             brng = (brng + 360) % 360
 
-            dbrng = brng - self.data["course"]
+            dbrng = brng - self.homeBearing
 
             self.beacons[i][1] = (dbrng + 360) % 360
             self.beacons[i][2] = abs(d)
@@ -105,8 +111,9 @@ class DataInput(object):
         rollTemp = PFDStruct.roll # in 0.01 deg
         pitchTemp = PFDStruct.pitch # in 0.01 deg
         yawTemp = PFDStruct.yaw # in 0.01 deg
-        altitudeTemp = PFDStruct.altitude
+        altitudeTemp = PFDStruct.altitude / 10.0
         airspeedTemp = PFDStruct.airspeed
+        currTemp = PFDStruct.battI / 10.0
 
         # apply local Low-Pass-Filter if necessary
         if (self.LPF):
@@ -116,6 +123,8 @@ class DataInput(object):
                 self.yaw_last = yawTemp
                 self.airspeed_last = airspeedTemp
                 self.altitude_last = altitudeTemp
+                self.curr_last = currTemp
+                self.timeLast = time.time()
                 self.first25HzSample = False
             else:
                 rollTemp = 0.5 * rollTemp + 0.5 * self.roll_last
@@ -123,13 +132,14 @@ class DataInput(object):
                 yawTemp = 0.5 * yawTemp + 0.5 * self.yaw_last
                 yawTemp = 0.01 * self.data["course"] + 0.99 * yawTemp
                 airspeedTemp = 0.15 * airspeedTemp + 0.85 * self.airspeed_last
-                altitudeTemp = 0.25 * altitudeTemp + 0.75 * self.altitude_last
+                altitudeTemp = 0.15 * altitudeTemp + 0.85 * self.altitude_last
+                currTemp = 0.1 * currTemp + 0.9 * self.curr_last
 
+                self.curr_last = currTemp
                 self.roll_last = rollTemp
                 self.pitch_last = pitchTemp
                 self.yaw_last = yawTemp
                 self.airspeed_last = airspeedTemp
-                self.altitude_last = altitudeTemp
 
         self.data["roll"] = rollTemp / 100.0
         self.data["pitch"] = pitchTemp / 100.0
@@ -138,25 +148,33 @@ class DataInput(object):
         self.data["altitude"] = altitudeTemp - self.altitudeOffset
         self.altitude = altitudeTemp
         self.data["airspeed"] = airspeedTemp / 10.0 - self.aspdOffset
-    
+        self.data["battI"] = currTemp
+
+        tnow = time.time()
+        self.data["mAh"] += currTemp * (tnow - self.timeLast) * 0.2777778
+        if tnow != self.timeLast:
+            vsTemp = (altitudeTemp - self.altitude_last) / (tnow - self.timeLast)
+            if abs(vsTemp - self.vs_last) > 2: vsTemp *= 0.1
+            self.data["verticalspeed"] = vsTemp * 0.05 + self.vs_last * 0.95
+            self.vs_last = self.data["verticalspeed"]
+            self.timeLast = tnow
+
+        self.altitude_last = altitudeTemp
+
+
     def update5HzData(self, NavDStruct):
         voltTemp = NavDStruct.battV / 100.0 + 0.07 # system error
-        currTemp = NavDStruct.battI / 100.0
 
         if (self.LPF):
             if (self.first5HzSample):
                 self.volt_last = voltTemp
-                self.curr_last = currTemp
                 self.first5HzSample = False
             else:
                 # apply low pass filter to voltage and current sensing
                 voltTemp = 0.2 * voltTemp + 0.8 * self.volt_last
-                currTemp = 0.5 * currTemp + 0.5 * self.curr_last
-                self.curr_last = currTemp
                 self.volt_last = voltTemp
-        
+
         self.data["battV"] = voltTemp
-        self.data["battI"] = currTemp # instantaneous current
         self.data["temperature"] = float(NavDStruct.temp) / 10.0
         self.data["latitude"] = float(NavDStruct.latitude) / 10000000.0
         self.data["longitude"] = float(NavDStruct.longitude) / 10000000.0
@@ -165,7 +183,7 @@ class DataInput(object):
 
     def simulateInputs(self):
         randNum = random.randint(0, 100)
-        
+
         if self.pitchUp:
             self.data["pitch"] += 0.5
             if (self.data["pitch"] >= 45):
@@ -176,18 +194,18 @@ class DataInput(object):
             if (self.data["pitch"] <= -45):
                 self.pitchUp = True
                 #self.data["roll"] += 180
-        
-        if self.rollRight:  
+
+        if self.rollRight:
             self.data["roll"] += 0.5
             if(self.data["roll"] >= 45): self.rollRight = False#self.data["roll"] -= 360
         else:
             self.data["roll"] -= 0.5
             if(self.data["roll"] <= -45): self.rollRight = True
-        
+
         self.data["yaw"] += 1
         if self.data["yaw"] == 360: self.data["yaw"] = 0
         self.data["course"] = self.data["yaw"]
-        
+
         if self.speedUp:
             self.data["battI"] += 1
             if self.data["battI"] >= 20:
@@ -205,6 +223,7 @@ class DataInput(object):
 
         self.data["latitude"] += 0.000001
         #self.data["longitude"] += 0.0000005
+        self.data["verticalspeed"] = -5.0
 
     def startLogging(self):
         print "start logging"
@@ -231,27 +250,63 @@ class myThread(threading.Thread):
         self.parent = parent
         threading.Thread.__init__(self)
         # create the protocol handling class
-        self.mavlink = customMavlinkv10.MAVLink(open("mavlinkDummy.txt", 'w+')) 
-        
-    def run(self):
-        while(not self.parent.exitFlag):
-            time.sleep(0.04)
-            self.parent.simulateInputs()
+        self.mavlink = MAVLink.MAVLink(open("mavlinkDummy.txt", 'w+'))
+        #self.replayList = pickle.load(open("../flight_log/log_2014-07-02_11_26_39.pkl","r"))
+
+    def doReplay(self):
+        length = len(self.replayList)
+        dictLen = len(self.parent.data)
+        self.homeCoordDeg = self.replayList[0][1]["longitude"], self.replayList[0][1]["latitude"]
+        self.homeCoordRad = math.radians(self.homeCoordDeg[0]), math.radians(self.homeCoordDeg[1])
+
+        for index in xrange(length-1):
+            d = self.replayList[index][1]
+            self.parent.data["roll"] = d["roll"]
+            self.parent.data["pitch"] = d["pitch"]
+            self.parent.data["yaw"] = d["yaw"]
+            self.parent.data["altitude"] = d["altitude"]
+            self.parent.data["airspeed"] = d["airspeed"]
+            self.parent.data["battV"] = d["battV"]
+            self.parent.data["battI"] = d["battI"]
+            self.parent.data["temperature"] = d["temperature"]
+            self.parent.data["latitude"] = d["latitude"]
+            self.parent.data["longitude"] = d["longitude"]
+            self.parent.data["course"] = d["course"]
+            self.parent.data["groundspeed"] = d["groundspeed"]
+            self.parent.data["mAh"] = d["mAh"]
+            self.parent.data["verticalspeed"] = d["verticalspeed"]
+
+            nextWaitTime = self.replayList[index+1][0] - self.replayList[index][0]
             self.parent.updateBeacons()
-            '''
+
+            time.sleep(nextWaitTime)
+            if (self.parent.exitFlag): break
+
+    def run(self):
+        tLast = time.time()
+        while(not self.parent.exitFlag):
+            # uncomment the following to enable simulation
+            #time.sleep(0.04)
+            #self.parent.simulateInputs()
+            #self.parent.updateBeacons()
+
             n = self.parent.COM.inWaiting()
             if(n != 0):
                 bytes = self.parent.COM.read(n)
                 msg_list = self.mavlink.parse_buffer(bytes)
                 if msg_list != None:
                     for msg in msg_list:
-                        if (isinstance(msg, customMavlinkv10.MAVLink_pfd_message)):
+                        if (isinstance(msg, MAVLink.MAVLink_pfd_message)):
+                            tNow = time.time()
+                            print tNow - tLast
+                            tLast = tNow
                             self.parent.update25HzData(msg)
-                        elif (isinstance(msg, customMavlinkv10.MAVLink_navd_message)):
+                        elif (isinstance(msg, MAVLink.MAVLink_navd_message)):
                             self.parent.update5HzData(msg)
                             self.parent.updateBeacons()
             else:
                 time.sleep(0.05)
-            '''
+
             self.parent.doLog()
-            
+
+            #self.doReplay()

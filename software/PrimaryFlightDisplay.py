@@ -78,6 +78,7 @@ class PrimaryFlightDisplay(wx.Panel):
         self.canvasWidth = self.width
     
         self.windowOffset = self.height/10 # center offset for attitude indicator
+        self.windowHorzOffset = -30
 
         self.pixelsPerTenMeters = 80 # altitude box
         self.pixelsPerTenKph = 60 # airspeed box
@@ -99,6 +100,7 @@ class PrimaryFlightDisplay(wx.Panel):
         # TODO: Redraw on demand
         self.OnAttitudePaint()
         self.OnAltitudePaint()
+        self.OnVerticalSpeedPaint()
         self.OnAirspeedPaint()
         self.OnCompassPaint()
         
@@ -134,9 +136,9 @@ class PrimaryFlightDisplay(wx.Panel):
         glLoadIdentity()
         # Translate up 1/5 of the window height, so that we are centered upward
         if not drawingFont:
-            glTranslatef(0, -self.windowOffset, 0)
+            glTranslatef(self.windowHorzOffset, -self.windowOffset, 0)
         else:
-            glTranslatef(0, self.windowOffset, 0)
+            glTranslatef(self.windowHorzOffset, self.windowOffset, 0)
 
     ### Actually draw things here!! ###
     def OnAttitudePaint(self):
@@ -210,7 +212,7 @@ class PrimaryFlightDisplay(wx.Panel):
         # Draw pitch bars
         centerX = self.hwidth
         centerY = self.hheight
-        glScissor(centerX-180,centerY-200+self.windowOffset,360,400)
+        glScissor(centerX-180+self.windowHorzOffset,centerY-200+self.windowOffset,360,400)
         glEnable(GL_SCISSOR_TEST)
         
         glLineWidth(3)
@@ -419,16 +421,116 @@ class PrimaryFlightDisplay(wx.Panel):
         glTranslatef(self.width/2 - 26, -diskYOffset+17, 0)
         self.myFont.glPrint(0,0, "%03d"%self.dataInput.data["yaw"])
 
+    # Vertical Speed Indicator
+    def OnVerticalSpeedPaint(self):
+        self.GoToOrigin()
+        glColor4f(4/255.0,10/255.0,10/255.0,220/255.0)
+
+        boxWidth = 50
+        leftBoxHalfHeight = 225
+        RightBoxHalfHeight = 160
+
+        # Left edge
+        x0, y0 = self.VSBoxLeftEdgeX, -leftBoxHalfHeight # top left corner
+        y1 = leftBoxHalfHeight
+        x2, y2 = x0 + boxWidth, RightBoxHalfHeight
+        y3 = -RightBoxHalfHeight
+
+        # draw the VSI box
+        glBegin(GL_QUADS)
+        glVertex2f(x0, y0)
+        glVertex2f(x0, y1)
+        glVertex2f(x2, y2)
+        glVertex2f(x2, y3)
+        glEnd()
+        glColor3f(1, 1, 1)
+        glLineWidth(1)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(x0, y0)
+        glVertex2f(x0, y1)
+        glVertex2f(x2, y2)
+        glVertex2f(x2, y3)
+        glEnd()
+
+        # draw markings
+        xMarkLeft = x0 + 20
+        xMarkRight = xMarkLeft + 10
+
+        yMark1 = 58
+        yMark2 = 116
+        yMark3 = 145
+        yMark4 = 174
+
+        glBegin(GL_LINES)
+        glVertex2f(xMarkLeft, 0)
+        glVertex2f(xMarkRight, 0)
+        glVertex2f(xMarkLeft, yMark1)
+        glVertex2f(xMarkRight, yMark1)
+        glVertex2f(xMarkLeft, -yMark1)
+        glVertex2f(xMarkRight, -yMark1)
+        glVertex2f(xMarkLeft, yMark2)
+        glVertex2f(xMarkRight, yMark2)
+        glVertex2f(xMarkLeft, -yMark2)
+        glVertex2f(xMarkRight, -yMark2)
+        glVertex2f(xMarkLeft, yMark3)
+        glVertex2f(xMarkRight, yMark3)
+        glVertex2f(xMarkLeft, -yMark3)
+        glVertex2f(xMarkRight, -yMark3)
+        glVertex2f(xMarkLeft, yMark4)
+        glVertex2f(xMarkRight, yMark4)
+        glVertex2f(xMarkLeft, -yMark4)
+        glVertex2f(xMarkRight, -yMark4)
+        glEnd()
+
+        xFont = self.hwidth + self.VSBoxLeftEdgeX + 6
+        yFont = self.hheight + self.windowOffset + self.windowOffset - 6
+
+        self.myCompassFont.glPrint(xFont, yFont, "0")
+        self.myCompassFont.glPrint(xFont, yFont + yMark1, "1")
+        self.myCompassFont.glPrint(xFont, yFont - yMark1, "1")
+        self.myCompassFont.glPrint(xFont, yFont + yMark2, "2")
+        self.myCompassFont.glPrint(xFont, yFont - yMark2, "2")
+        self.myCompassFont.glPrint(xFont, yFont + yMark3, "5")
+        self.myCompassFont.glPrint(xFont, yFont - yMark3, "5")
+        self.myCompassFont.glPrint(xFont, yFont + yMark4, "8")
+        self.myCompassFont.glPrint(xFont, yFont - yMark4, "8")
+
+        # draw the needle
+        vs = abs(self.dataInput.data["verticalspeed"])
+        if (vs < 2.0): 
+            needleY = (vs / 2.0) * yMark2
+        else:
+            needleY = yMark2 + ((vs - 2.0) / 6.0) * (yMark4 - yMark2)
+
+        yFontUp = self.hheight + self.windowOffset + self.windowOffset + leftBoxHalfHeight + 6
+        yFontDn = self.hheight + self.windowOffset + self.windowOffset - leftBoxHalfHeight - 16
+
+        if (self.dataInput.data["verticalspeed"] > 0):
+            needleY = -needleY
+            if (self.dataInput.data["verticalspeed"] > 0.2):
+                self.myCompassFont.glPrint(xFont, yFontUp , "%0.1f"%self.dataInput.data["verticalspeed"])
+        elif self.dataInput.data["verticalspeed"] < -0.2:
+            self.myCompassFont.glPrint(xFont, yFontDn , "%0.1f"%abs(self.dataInput.data["verticalspeed"]))
+
+        glLineWidth(5)
+        glBegin(GL_LINES)
+        glVertex2f(x2-3, 0)
+        glVertex2f(xMarkLeft, needleY)
+        glEnd()
+
     # The sliding altitude indicator
     def OnAltitudePaint(self):
         self.GoToOrigin()
         #glTranslatef(0, 100, 0)
-        glColor4f(4/255.0,10/255.0,10/255.0,148/255.0)
+        glColor4f(4/255.0,10/255.0,10/255.0,180/255.0)
 
         boxWidth, halfBoxHeight = 100, 225
-        edgeMargin = 25
+        edgeMargin = 50
         x0, y0 = self.hwidth-boxWidth-edgeMargin, -halfBoxHeight
         x1, y1 = self.hwidth-edgeMargin, halfBoxHeight
+
+        # parameters to be used by the VSI box
+        self.VSBoxLeftEdgeX = x0 + boxWidth + 20
 
         # draw the altitude box
         glBegin(GL_QUADS)
@@ -491,7 +593,7 @@ class PrimaryFlightDisplay(wx.Panel):
             tempAlt += 10
 
         # draw the static box holding exact altitude text
-        glColor4f(4/255.0,10/255.0,10/255.0,230/255.0)
+        glColor4f(4/255.0,10/255.0,10/255.0,180/255.0)
         glBegin(GL_TRIANGLES)
         glVertex2f(xRight, 0)
         glVertex2f(xRight+8, -8)
@@ -501,8 +603,8 @@ class PrimaryFlightDisplay(wx.Panel):
         glBegin(GL_QUADS)
         glVertex2f(xRight+8, -22)
         glVertex2f(xRight+8, 22)
-        glVertex2f(x1, 22)
-        glVertex2f(x1, -22)
+        glVertex2f(x1+10, 22)
+        glVertex2f(x1+10, -22)
         glEnd()
 
         # draw the outline for the above box
@@ -512,21 +614,21 @@ class PrimaryFlightDisplay(wx.Panel):
         glVertex2f(xRight, 0)
         glVertex2f(xRight+8, -8)
         glVertex2f(xRight+8, -22)
-        glVertex2f(x1, -22)
-        glVertex2f(x1, 22)
+        glVertex2f(x1+10, -22)
+        glVertex2f(x1+10, 22)
         glVertex2f(xRight+8, 22)
         glVertex2f(xRight+8, 8)
         glEnd()
 
-        self.myFont.glPrint(xFont+5, yFontBase, "%d"%alt)
+        self.myFont.glPrint(xFont+7, yFontBase, "%d"%alt)
 
     # TODO: make the sliding airspeed indicator
     def OnAirspeedPaint(self):
         self.GoToOrigin()
-        glColor4f(4/255.0,10/255.0,10/255.0,148/255.0)
+        glColor4f(4/255.0,10/255.0,10/255.0,180/255.0)
 
         boxWidth, halfBoxHeight = 100, 225
-        edgeMargin = 25
+        edgeMargin = 50
         x0, y0 = self.hwidth-boxWidth-edgeMargin, -halfBoxHeight
         x1, y1 = self.hwidth-edgeMargin, halfBoxHeight
         x0 = -x0
@@ -637,7 +739,7 @@ class PrimaryFlightDisplay(wx.Panel):
         bigCharWidth = 18
         if aspd >= 10 and aspd < 100:
             self.myFont.glPrint(xFont-15-bigCharWidth, yFontBase, "%d"%int(aspd))
-        elif aspd >= 100 or aspd < 0:
+        elif aspd >= 100 or aspd < -1:
             self.myFont.glPrint(xFont-15-bigCharWidth-bigCharWidth, yFontBase, "%d"%int(aspd))
         else:
             self.myFont.glPrint(xFont-15, yFontBase, "%d"%int(aspd))
