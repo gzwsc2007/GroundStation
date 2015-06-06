@@ -7,6 +7,7 @@ Note: this file has been auto-generated. DO NOT EDIT
 '''
 
 import struct, array, time, json, os, sys, platform
+
 from mavcrc import x25crc
 
 WIRE_PROTOCOL_VERSION = "1.0"
@@ -167,6 +168,9 @@ MAVLINK_MSG_ID_BAD_DATA = -1
 MAVLINK_MSG_ID_PFD = 150
 MAVLINK_MSG_ID_NAVD = 151
 MAVLINK_MSG_ID_SYSTEMID = 152
+MAVLINK_MSG_ID_MAGCAL = 153
+MAVLINK_MSG_ID_SYSSTATE = 154
+MAVLINK_MSG_ID_SYSCMD = 155
 
 class MAVLink_pfd_message(MAVLink_message):
         '''
@@ -228,41 +232,120 @@ class MAVLink_navd_message(MAVLink_message):
 
 class MAVLink_systemid_message(MAVLink_message):
         '''
-        This message encodes part of the data needed for System
+        This message encodes all the data needed for System
         Identification.
         '''
         id = MAVLINK_MSG_ID_SYSTEMID
         name = 'SYSTEMID'
-        fieldnames = ['u_a', 'u_e', 'u_r', 'ax', 'ay', 'az', 'p', 'q', 'r']
-        ordered_fieldnames = [ 'u_a', 'u_e', 'u_r', 'ax', 'ay', 'az', 'p', 'q', 'r' ]
-        format = '<hhhhhhhhh'
-        native_format = bytearray('<hhhhhhhhh', 'ascii')
-        orders = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-        lengths = [1, 1, 1, 1, 1, 1, 1, 1, 1]
-        array_lengths = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-        crc_extra = 168
+        fieldnames = ['timestamp', 'u_a', 'u_e', 'u_r', 'ax', 'ay', 'az', 'roll', 'pitch', 'yaw', 'p', 'q', 'r']
+        ordered_fieldnames = [ 'timestamp', 'u_a', 'u_e', 'u_r', 'ax', 'ay', 'az', 'roll', 'pitch', 'yaw', 'p', 'q', 'r' ]
+        format = '<Ihhhhhhhhhhhh'
+        native_format = bytearray('<Ihhhhhhhhhhhh', 'ascii')
+        orders = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        lengths = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        array_lengths = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        crc_extra = 217
 
-        def __init__(self, u_a, u_e, u_r, ax, ay, az, p, q, r):
+        def __init__(self, timestamp, u_a, u_e, u_r, ax, ay, az, roll, pitch, yaw, p, q, r):
                 MAVLink_message.__init__(self, MAVLink_systemid_message.id, MAVLink_systemid_message.name)
                 self._fieldnames = MAVLink_systemid_message.fieldnames
+                self.timestamp = timestamp
                 self.u_a = u_a
                 self.u_e = u_e
                 self.u_r = u_r
                 self.ax = ax
                 self.ay = ay
                 self.az = az
+                self.roll = roll
+                self.pitch = pitch
+                self.yaw = yaw
                 self.p = p
                 self.q = q
                 self.r = r
 
         def pack(self, mav):
-                return MAVLink_message.pack(self, mav, 168, struct.pack('<hhhhhhhhh', self.u_a, self.u_e, self.u_r, self.ax, self.ay, self.az, self.p, self.q, self.r))
+                return MAVLink_message.pack(self, mav, 217, struct.pack('<Ihhhhhhhhhhhh', self.timestamp, self.u_a, self.u_e, self.u_r, self.ax, self.ay, self.az, self.roll, self.pitch, self.yaw, self.p, self.q, self.r))
+
+class MAVLink_magcal_message(MAVLink_message):
+        '''
+        This message encodes raw magnetometer data.
+        '''
+        id = MAVLINK_MSG_ID_MAGCAL
+        name = 'MAGCAL'
+        fieldnames = ['mx', 'my', 'mz']
+        ordered_fieldnames = [ 'mx', 'my', 'mz' ]
+        format = '<hhh'
+        native_format = bytearray('<hhh', 'ascii')
+        orders = [0, 1, 2]
+        lengths = [1, 1, 1]
+        array_lengths = [0, 0, 0]
+        crc_extra = 75
+
+        def __init__(self, mx, my, mz):
+                MAVLink_message.__init__(self, MAVLink_magcal_message.id, MAVLink_magcal_message.name)
+                self._fieldnames = MAVLink_magcal_message.fieldnames
+                self.mx = mx
+                self.my = my
+                self.mz = mz
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 75, struct.pack('<hhh', self.mx, self.my, self.mz))
+
+class MAVLink_sysstate_message(MAVLink_message):
+        '''
+        This message encodes the current system status.
+        '''
+        id = MAVLINK_MSG_ID_SYSSTATE
+        name = 'SYSSTATE'
+        fieldnames = ['mode']
+        ordered_fieldnames = [ 'mode' ]
+        format = '<B'
+        native_format = bytearray('<B', 'ascii')
+        orders = [0]
+        lengths = [1]
+        array_lengths = [0]
+        crc_extra = 196
+
+        def __init__(self, mode):
+                MAVLink_message.__init__(self, MAVLink_sysstate_message.id, MAVLink_sysstate_message.name)
+                self._fieldnames = MAVLink_sysstate_message.fieldnames
+                self.mode = mode
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 196, struct.pack('<B', self.mode))
+
+class MAVLink_syscmd_message(MAVLink_message):
+        '''
+        This message encodes commands sent by the ground station.
+        '''
+        id = MAVLINK_MSG_ID_SYSCMD
+        name = 'SYSCMD'
+        fieldnames = ['cmd', 'payload']
+        ordered_fieldnames = [ 'payload', 'cmd' ]
+        format = '<IB'
+        native_format = bytearray('<IB', 'ascii')
+        orders = [1, 0]
+        lengths = [1, 1]
+        array_lengths = [0, 0]
+        crc_extra = 109
+
+        def __init__(self, cmd, payload):
+                MAVLink_message.__init__(self, MAVLink_syscmd_message.id, MAVLink_syscmd_message.name)
+                self._fieldnames = MAVLink_syscmd_message.fieldnames
+                self.cmd = cmd
+                self.payload = payload
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 109, struct.pack('<IB', self.payload, self.cmd))
 
 
 mavlink_map = {
         MAVLINK_MSG_ID_PFD : MAVLink_pfd_message,
         MAVLINK_MSG_ID_NAVD : MAVLink_navd_message,
         MAVLINK_MSG_ID_SYSTEMID : MAVLink_systemid_message,
+        MAVLINK_MSG_ID_MAGCAL : MAVLink_magcal_message,
+        MAVLINK_MSG_ID_SYSSTATE : MAVLink_sysstate_message,
+        MAVLINK_MSG_ID_SYSCMD : MAVLink_syscmd_message,
 }
 
 class MAVError(Exception):
@@ -583,39 +666,105 @@ class MAVLink(object):
                 '''
                 return self.send(self.navd_encode(battV, temp, latitude, longitude, course, groundspeed))
 
-        def systemid_encode(self, u_a, u_e, u_r, ax, ay, az, p, q, r):
+        def systemid_encode(self, timestamp, u_a, u_e, u_r, ax, ay, az, roll, pitch, yaw, p, q, r):
                 '''
-                This message encodes part of the data needed for System
-                Identification.
+                This message encodes all the data needed for System Identification.
 
+                timestamp                 : Ticks elapsed since the system has started. (uint32_t)
                 u_a                       : Aileron control input in raw PWM value. Positive means right wing down. (int16_t)
                 u_e                       : Elevator control input in raw PWM value. Positive means pitching up. (int16_t)
                 u_r                       : Rudder control input in raw PWM value. Positive means turning to the right. (int16_t)
                 ax                        : Acceleration on the body x-axis in 0.01g. Positive front. (int16_t)
                 ay                        : Acceleration on the body y-axis in 0.01g. Positive right. (int16_t)
                 az                        : Acceleration on the body z-axis in 0.01g. Positive down. (int16_t)
+                roll                      : Roll angle in 0.01 degrees. Positive means rolling CW (right down). (int16_t)
+                pitch                     : Pitch angle in 0.01 degrees. Positive means pitching up. (int16_t)
+                yaw                       : Yaw angle (magnetic heading) in 0.01 degrees. Positive means yawing CW (turn to the right). (int16_t)
                 p                         : Roll rate in 0.1 deg/s. Same sign-convention as roll angle. (int16_t)
                 q                         : Pitch rate in 0.1 deg/s. Same sign-convention as pitch angle. (int16_t)
                 r                         : Yaw rate in 0.1 deg/s. Same sign-convention as yaw angle. (int16_t)
 
                 '''
-                return MAVLink_systemid_message(u_a, u_e, u_r, ax, ay, az, p, q, r)
+                return MAVLink_systemid_message(timestamp, u_a, u_e, u_r, ax, ay, az, roll, pitch, yaw, p, q, r)
 
-        def systemid_send(self, u_a, u_e, u_r, ax, ay, az, p, q, r):
+        def systemid_send(self, timestamp, u_a, u_e, u_r, ax, ay, az, roll, pitch, yaw, p, q, r):
                 '''
-                This message encodes part of the data needed for System
-                Identification.
+                This message encodes all the data needed for System Identification.
 
+                timestamp                 : Ticks elapsed since the system has started. (uint32_t)
                 u_a                       : Aileron control input in raw PWM value. Positive means right wing down. (int16_t)
                 u_e                       : Elevator control input in raw PWM value. Positive means pitching up. (int16_t)
                 u_r                       : Rudder control input in raw PWM value. Positive means turning to the right. (int16_t)
                 ax                        : Acceleration on the body x-axis in 0.01g. Positive front. (int16_t)
                 ay                        : Acceleration on the body y-axis in 0.01g. Positive right. (int16_t)
                 az                        : Acceleration on the body z-axis in 0.01g. Positive down. (int16_t)
+                roll                      : Roll angle in 0.01 degrees. Positive means rolling CW (right down). (int16_t)
+                pitch                     : Pitch angle in 0.01 degrees. Positive means pitching up. (int16_t)
+                yaw                       : Yaw angle (magnetic heading) in 0.01 degrees. Positive means yawing CW (turn to the right). (int16_t)
                 p                         : Roll rate in 0.1 deg/s. Same sign-convention as roll angle. (int16_t)
                 q                         : Pitch rate in 0.1 deg/s. Same sign-convention as pitch angle. (int16_t)
                 r                         : Yaw rate in 0.1 deg/s. Same sign-convention as yaw angle. (int16_t)
 
                 '''
-                return self.send(self.systemid_encode(u_a, u_e, u_r, ax, ay, az, p, q, r))
+                return self.send(self.systemid_encode(timestamp, u_a, u_e, u_r, ax, ay, az, roll, pitch, yaw, p, q, r))
+
+        def magcal_encode(self, mx, my, mz):
+                '''
+                This message encodes raw magnetometer data.
+
+                mx                        : Magnetometer raw X reading (int16_t)
+                my                        : Magnetometer raw Y reading (int16_t)
+                mz                        : Magnetometer raw Z reading (int16_t)
+
+                '''
+                return MAVLink_magcal_message(mx, my, mz)
+
+        def magcal_send(self, mx, my, mz):
+                '''
+                This message encodes raw magnetometer data.
+
+                mx                        : Magnetometer raw X reading (int16_t)
+                my                        : Magnetometer raw Y reading (int16_t)
+                mz                        : Magnetometer raw Z reading (int16_t)
+
+                '''
+                return self.send(self.magcal_encode(mx, my, mz))
+
+        def sysstate_encode(self, mode):
+                '''
+                This message encodes the current system status.
+
+                mode                      : Current mode of the HACS system (uint8_t)
+
+                '''
+                return MAVLink_sysstate_message(mode)
+
+        def sysstate_send(self, mode):
+                '''
+                This message encodes the current system status.
+
+                mode                      : Current mode of the HACS system (uint8_t)
+
+                '''
+                return self.send(self.sysstate_encode(mode))
+
+        def syscmd_encode(self, cmd, payload):
+                '''
+                This message encodes commands sent by the ground station.
+
+                cmd                       : A set of well-knwon commands (uint8_t)
+                payload                   : Optional command payload (uint32_t)
+
+                '''
+                return MAVLink_syscmd_message(cmd, payload)
+
+        def syscmd_send(self, cmd, payload):
+                '''
+                This message encodes commands sent by the ground station.
+
+                cmd                       : A set of well-knwon commands (uint8_t)
+                payload                   : Optional command payload (uint32_t)
+
+                '''
+                return self.send(self.syscmd_encode(cmd, payload))
 

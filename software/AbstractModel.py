@@ -12,6 +12,16 @@ import copy
 
 import MAVLink.MAVLink as MAVLink
 
+class HACS_Proxy(object):
+    HACS_GND_CMD_SET_MODE = 0
+    HACS_GND_CMD_GET_MODE = 1
+
+    HACS_MODE_MANUAL = 0
+    HACS_MODE_MANUAL_WITH_SAS = 1
+    HACS_MODE_AUTOPILOT = 2
+    HACS_MODE_SYSTEM_IDENTIFICATION = 3
+    HACS_MODE_MAG_CAL = 4
+
 
 class DataInput(object):
     def __init__(self):
@@ -58,6 +68,9 @@ class DataInput(object):
         self.COM = serial.Serial(1,115200*2) # COM2
         self.COM.flushInput() # flush input buffer
 
+        # initialize MAVLink protocol
+        self.mavlink = MAVLink.MAVLink(self.COM)
+
         self.altitude = 0
         self.altitudeOffset = 0
         self.aspdOffset = 0
@@ -75,7 +88,8 @@ class DataInput(object):
         self.first25HzSample = True
         self.exitFlag = False
         self.logEnable = False
-        thread = myThread(self)
+
+        thread = myThread(self, self.mavlink)
         thread.start()
 
     # update the beacons list based on current position & heading of the aircraft
@@ -238,6 +252,12 @@ class DataInput(object):
         f = open("log_%s.pkl"%time.strftime("%Y-%m-%d_%H_%M_%S"), "w+")
         pickle.dump(self.logList, f)
 
+    def startMagCal(self):
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MAG_CAL)
+
+    def stopMagCal(self):
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MANUAL)
+
     def doLog(self):
         if (self.logEnable):
             tnow = time.time()
@@ -246,11 +266,11 @@ class DataInput(object):
                 self.lastLogTime = tnow
 
 class myThread(threading.Thread):
-    def __init__(self,parent):
+    def __init__(self,parent,mavlink):
         self.parent = parent
         threading.Thread.__init__(self)
         # create the protocol handling class
-        self.mavlink = MAVLink.MAVLink(open("mavlinkDummy.txt", 'w+'))
+        self.mavlink = mavlink
         #self.replayList = pickle.load(open("../flight_log/log_2014-07-02_11_26_39.pkl","r"))
 
     def doReplay(self):
@@ -283,7 +303,7 @@ class myThread(threading.Thread):
             if (self.parent.exitFlag): break
 
     def run(self):
-        tLast = time.time()
+#        tLast = time.time()
         while(not self.parent.exitFlag):
             # uncomment the following to enable simulation
             #time.sleep(0.04)
@@ -297,15 +317,17 @@ class myThread(threading.Thread):
                 if msg_list != None:
                     for msg in msg_list:
                         if (isinstance(msg, MAVLink.MAVLink_pfd_message)):
-                            tNow = time.time()
-                            print tNow - tLast
-                            tLast = tNow
+#                            tNow = time.time()
+#                            print tNow - tLast
+#                            tLast = tNow
                             self.parent.update25HzData(msg)
                         elif (isinstance(msg, MAVLink.MAVLink_navd_message)):
                             self.parent.update5HzData(msg)
                             self.parent.updateBeacons()
+                        elif (isinstance(msg, MAVLink.MAVLink_magcal_message)):
+                            print "%d %d %d"%(msg.mx,msg.my,msg.mz)
             else:
-                time.sleep(0.05)
+                time.sleep(0.025)
 
             self.parent.doLog()
 

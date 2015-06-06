@@ -182,9 +182,14 @@ class GroundStationGUI(wx.Frame):
         LogMenu = wx.Menu() # The abstract menu
         LogMenu.Append(101, "Start/Stop Log", "Start or Stop logging data", wx.ITEM_CHECK)
 
+        # Calibration menu
+        CalMenu = wx.Menu()
+        CalMenu.Append(201, "Start/Stop Mag Cal", "Start or Stop Magnetometer Calibration", wx.ITEM_CHECK)
+
         # Creating the menu bar
         menuBar = wx.MenuBar() # The visible menu bar
         menuBar.Append(LogMenu, "&Log")
+        menuBar.Append(CalMenu, "&Calibration")
 
         self.SetMenuBar(menuBar)
 
@@ -247,6 +252,7 @@ class GroundStationGUI(wx.Frame):
 
         # bind menu items
         self.Bind(wx.EVT_MENU, self.OnLogClick, id=101)
+        self.Bind(wx.EVT_MENU, self.OnCalClick, id=201)
 
         # sizers for overall layout
         v2sizer = wx.BoxSizer(wx.VERTICAL)
@@ -265,6 +271,10 @@ class GroundStationGUI(wx.Frame):
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.OnTimer, self.timer)
         self.timer.Start(30) # ms
+
+    def OnCalClick(self, evt):
+        if (evt.IsChecked()): self.PFD.dataInput.startMagCal()
+        else: self.PFD.dataInput.stopMagCal()
 
     def OnLogClick(self, evt):
         if (evt.IsChecked()): self.PFD.dataInput.startLogging()
