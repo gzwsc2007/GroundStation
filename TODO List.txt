@@ -36,3 +36,7 @@ Note: The dates denote the time when I added TODO items, not the time when I com
 - solve the Logger bug [Done]
 - Add vertical speed indicator [Done]
 - Check GPS ground speed [Done]
+
+2015-06-08
+
+- Flow control when sending data to HACS. Basically, only send up to 32 bytes each time a packet is received (i.e. serial read) [Bug fixed. Length calculation on the ground station micro is done incorrectly]

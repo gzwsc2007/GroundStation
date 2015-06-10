@@ -9,8 +9,12 @@ import os
 import serial
 import pickle
 import copy
-
 import MAVLink.MAVLink as MAVLink
+import MagCalibrator
+import binascii
+
+# Singleton instance of the magnetometer calibration handler
+MagCalSingleton = MagCalibrator.MagCalibrator()
 
 class HACS_Proxy(object):
     HACS_GND_CMD_SET_MODE = 0
@@ -22,6 +26,23 @@ class HACS_Proxy(object):
     HACS_MODE_SYSTEM_IDENTIFICATION = 3
     HACS_MODE_MAG_CAL = 4
 
+class FakeWriter(object):
+    def __init__(self, com):
+        self.com = com
+        self.chunksize = 32
+
+    def write(self, buf):
+        count = len(buf)
+
+        i = 0
+        while count >= self.chunksize:
+            self.com.write(buf[i:i+self.chunksize])
+            i += self.chunksize
+            count -= self.chunksize
+            time.sleep(0.05)
+
+        self.com.write(buf[-count:])
+        time.sleep(0.05)
 
 class DataInput(object):
     def __init__(self):
@@ -69,7 +90,7 @@ class DataInput(object):
         self.COM.flushInput() # flush input buffer
 
         # initialize MAVLink protocol
-        self.mavlink = MAVLink.MAVLink(self.COM)
+        self.mavlink = MAVLink.MAVLink(FakeWriter(self.COM))
 
         self.altitude = 0
         self.altitudeOffset = 0
@@ -253,10 +274,20 @@ class DataInput(object):
         pickle.dump(self.logList, f)
 
     def startMagCal(self):
+        MagCalSingleton.startAcceptingSamples()
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MAG_CAL)
+        pass
 
     def stopMagCal(self):
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MANUAL)
+        MagCalSingleton.doneReceivingAndStartCal()
+        print "Offset: ", MagCalSingleton.getHardIronOffsets()
+        print "W matrix: ", MagCalSingleton.getSoftIronMatrix()
+        # Transmit calibration result to HACS
+        # TODO: seems to be transmitting too fast. How to flow control?
+        self.mavlink.magcalresult_send(float(MagCalSingleton.getMagFieldRadius()),
+                    [float(item) for sublist in MagCalSingleton.getHardIronOffsets() for item in sublist],
+                    [float(item) for sublist in MagCalSingleton.getSoftIronMatrix() for item in sublist])
 
     def doLog(self):
         if (self.logEnable):
@@ -269,7 +300,6 @@ class myThread(threading.Thread):
     def __init__(self,parent,mavlink):
         self.parent = parent
         threading.Thread.__init__(self)
-        # create the protocol handling class
         self.mavlink = mavlink
         #self.replayList = pickle.load(open("../flight_log/log_2014-07-02_11_26_39.pkl","r"))
 
@@ -325,7 +355,7 @@ class myThread(threading.Thread):
                             self.parent.update5HzData(msg)
                             self.parent.updateBeacons()
                         elif (isinstance(msg, MAVLink.MAVLink_magcal_message)):
-                            print "%d %d %d"%(msg.mx,msg.my,msg.mz)
+                            MagCalSingleton.onNewSample(msg.mx,msg.my,msg.mz)
             else:
                 time.sleep(0.025)
 

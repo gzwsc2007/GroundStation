@@ -171,6 +171,7 @@ MAVLINK_MSG_ID_SYSTEMID = 152
 MAVLINK_MSG_ID_MAGCAL = 153
 MAVLINK_MSG_ID_SYSSTATE = 154
 MAVLINK_MSG_ID_SYSCMD = 155
+MAVLINK_MSG_ID_MAGCALRESULT = 156
 
 class MAVLink_pfd_message(MAVLink_message):
         '''
@@ -338,6 +339,31 @@ class MAVLink_syscmd_message(MAVLink_message):
         def pack(self, mav):
                 return MAVLink_message.pack(self, mav, 109, struct.pack('<IB', self.payload, self.cmd))
 
+class MAVLink_magcalresult_message(MAVLink_message):
+        '''
+        This message encodes magnetometer calibration results.
+        '''
+        id = MAVLINK_MSG_ID_MAGCALRESULT
+        name = 'MAGCALRESULT'
+        fieldnames = ['B_field', 'hard_iron', 'soft_iron']
+        ordered_fieldnames = [ 'B_field', 'hard_iron', 'soft_iron' ]
+        format = '<f3f9f'
+        native_format = bytearray('<fff', 'ascii')
+        orders = [0, 1, 2]
+        lengths = [1, 3, 9]
+        array_lengths = [0, 3, 9]
+        crc_extra = 96
+
+        def __init__(self, B_field, hard_iron, soft_iron):
+                MAVLink_message.__init__(self, MAVLink_magcalresult_message.id, MAVLink_magcalresult_message.name)
+                self._fieldnames = MAVLink_magcalresult_message.fieldnames
+                self.B_field = B_field
+                self.hard_iron = hard_iron
+                self.soft_iron = soft_iron
+
+        def pack(self, mav):
+                return MAVLink_message.pack(self, mav, 96, struct.pack('<f3f9f', self.B_field, self.hard_iron[0], self.hard_iron[1], self.hard_iron[2], self.soft_iron[0], self.soft_iron[1], self.soft_iron[2], self.soft_iron[3], self.soft_iron[4], self.soft_iron[5], self.soft_iron[6], self.soft_iron[7], self.soft_iron[8]))
+
 
 mavlink_map = {
         MAVLINK_MSG_ID_PFD : MAVLink_pfd_message,
@@ -346,6 +372,7 @@ mavlink_map = {
         MAVLINK_MSG_ID_MAGCAL : MAVLink_magcal_message,
         MAVLINK_MSG_ID_SYSSTATE : MAVLink_sysstate_message,
         MAVLINK_MSG_ID_SYSCMD : MAVLink_syscmd_message,
+        MAVLINK_MSG_ID_MAGCALRESULT : MAVLink_magcalresult_message,
 }
 
 class MAVError(Exception):
@@ -767,4 +794,26 @@ class MAVLink(object):
 
                 '''
                 return self.send(self.syscmd_encode(cmd, payload))
+
+        def magcalresult_encode(self, B_field, hard_iron, soft_iron):
+                '''
+                This message encodes magnetometer calibration results.
+
+                B_field                   : radius of the calibrated sphere (float)
+                hard_iron                 : hard iron offsets (float)
+                soft_iron                 : soft iron matrix (W_inverted) (float)
+
+                '''
+                return MAVLink_magcalresult_message(B_field, hard_iron, soft_iron)
+
+        def magcalresult_send(self, B_field, hard_iron, soft_iron):
+                '''
+                This message encodes magnetometer calibration results.
+
+                B_field                   : radius of the calibrated sphere (float)
+                hard_iron                 : hard iron offsets (float)
+                soft_iron                 : soft iron matrix (W_inverted) (float)
+
+                '''
+                return self.send(self.magcalresult_encode(B_field, hard_iron, soft_iron))
 
