@@ -19,6 +19,9 @@ MagCalSingleton = MagCalibrator.MagCalibrator()
 class HACS_Proxy(object):
     HACS_GND_CMD_SET_MODE = 0
     HACS_GND_CMD_GET_MODE = 1
+    HACS_GND_CMD_CALIBRATE_AIRSPEED = 2
+    HACS_GND_CMD_CALIBRATE_BAROMETER = 3
+    HACS_GND_CMD_CALIBRATE_TRIM_VALUES = 4
 
     HACS_MODE_MANUAL = 0
     HACS_MODE_MANUAL_WITH_SAS = 1
@@ -54,9 +57,9 @@ class DataInput(object):
         # spherical coordinates!!!!)
         self.data = {
                     # 25 Hz data
-                    "roll":0.0, # [-180, 180) degrees, positive is CCW
+                    "roll":0.0, # [-180, 180) degrees, positive is right-wing down
                     "pitch":0.0, # [-90, 90) degrees, positive is upward
-                    "yaw":0.0, # [0, 360) degrees
+                    "yaw":0.0, # [0, 360) degrees, positive is rotating to the right
                     "altitude":0, # meters
                     "airspeed":0, # m/s
                     # 5 Hz data
@@ -93,6 +96,7 @@ class DataInput(object):
         self.mavlink = MAVLink.MAVLink(FakeWriter(self.COM))
 
         self.altitude = 0
+        self.altitude_last = 0
         self.altitudeOffset = 0
         self.aspdOffset = 0
         self.batt_capacity = 5000    # default battery capacity 5000 mAh
@@ -104,7 +108,7 @@ class DataInput(object):
         self.timeLast = 0
 
         self.EN_ALT_OFFSET = False # enable relative altitude mode
-        self.LPF = True # enable local Low-Pass-Filter
+        self.LPF = False # enable local Low-Pass-Filter
         self.first5HzSample = True
         self.first25HzSample = True
         self.exitFlag = False
@@ -198,7 +202,7 @@ class DataInput(object):
 
 
     def update5HzData(self, NavDStruct):
-        voltTemp = NavDStruct.battV / 100.0 + 0.07 # system error
+        voltTemp = NavDStruct.battV / 100.0
 
         if (self.LPF):
             if (self.first5HzSample):
@@ -276,7 +280,6 @@ class DataInput(object):
     def startMagCal(self):
         MagCalSingleton.startAcceptingSamples()
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MAG_CAL)
-        pass
 
     def stopMagCal(self):
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MANUAL)
@@ -284,10 +287,19 @@ class DataInput(object):
         print "Offset: ", MagCalSingleton.getHardIronOffsets()
         print "W matrix: ", MagCalSingleton.getSoftIronMatrix()
         # Transmit calibration result to HACS
-        # TODO: seems to be transmitting too fast. How to flow control?
         self.mavlink.magcalresult_send(float(MagCalSingleton.getMagFieldRadius()),
                     [float(item) for sublist in MagCalSingleton.getHardIronOffsets() for item in sublist],
                     [float(item) for sublist in MagCalSingleton.getSoftIronMatrix() for item in sublist])
+
+    def doAirspeedCal(self):
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_CALIBRATE_AIRSPEED, 0)
+
+    def doBaroCal(self):
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_CALIBRATE_BAROMETER, 0)
+
+    def doTrimValCal(self):
+        print "dude"
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_CALIBRATE_TRIM_VALUES, 0)
 
     def doLog(self):
         if (self.logEnable):
@@ -343,7 +355,10 @@ class myThread(threading.Thread):
             n = self.parent.COM.inWaiting()
             if(n != 0):
                 bytes = self.parent.COM.read(n)
-                msg_list = self.mavlink.parse_buffer(bytes)
+                try:
+                    msg_list = self.mavlink.parse_buffer(bytes)
+                except:
+                    continue
                 if msg_list != None:
                     for msg in msg_list:
                         if (isinstance(msg, MAVLink.MAVLink_pfd_message)):

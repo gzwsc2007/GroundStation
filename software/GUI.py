@@ -185,6 +185,9 @@ class GroundStationGUI(wx.Frame):
         # Calibration menu
         CalMenu = wx.Menu()
         CalMenu.Append(201, "Start/Stop Mag Cal", "Start or Stop Magnetometer Calibration", wx.ITEM_CHECK)
+        CalMenu.Append(202, "Airspeed Cal", "Perform airspeed zero calibration", wx.ITEM_NORMAL)
+        CalMenu.Append(203, "Altimeter Cal", "Perform altimeter zero calibration", wx.ITEM_NORMAL)
+        CalMenu.Append(204, "Trim Value Cal", "Remember the current trim values on Aileron, Elevator and Rudder", wx.ITEM_NORMAL)
 
         # Creating the menu bar
         menuBar = wx.MenuBar() # The visible menu bar
@@ -197,11 +200,11 @@ class GroundStationGUI(wx.Frame):
         bgPanel = wx.Panel(self)
 
         # create a button to reset the altitude offset
-        buttonAltReset = wx.Button(bgPanel, 1, "Abs/Rel Altitude")
+        buttonAltReset = wx.Button(bgPanel, 1, "Zero Altitude")
         # create a button to set HOME
         buttonSetHome = wx.Button(bgPanel, 2, "SetHome")
         # create a button to reset airspeed
-        buttonAspdReset = wx.Button(bgPanel, 3, "Reset Airspeed")
+        buttonAspdReset = wx.Button(bgPanel, 3, "Zero Airspeed")
 
         # create a choice menu to select scale for the Navigation Display
         scaleChoice = wx.Choice(bgPanel, 1, name="Scale", choices=ND_SCALE_CHOICE_LIST)
@@ -253,6 +256,9 @@ class GroundStationGUI(wx.Frame):
         # bind menu items
         self.Bind(wx.EVT_MENU, self.OnLogClick, id=101)
         self.Bind(wx.EVT_MENU, self.OnCalClick, id=201)
+        self.Bind(wx.EVT_MENU, self.OnCalClick, id=202)
+        self.Bind(wx.EVT_MENU, self.OnCalClick, id=203)
+        self.Bind(wx.EVT_MENU, self.OnCalClick, id=204)
 
         # sizers for overall layout
         v2sizer = wx.BoxSizer(wx.VERTICAL)
@@ -273,8 +279,17 @@ class GroundStationGUI(wx.Frame):
         self.timer.Start(30) # ms
 
     def OnCalClick(self, evt):
-        if (evt.IsChecked()): self.PFD.dataInput.startMagCal()
-        else: self.PFD.dataInput.stopMagCal()
+        evt_ID = evt.GetId()
+
+        if (evt_ID == 201):
+            if (evt.IsChecked()): self.PFD.dataInput.startMagCal()
+            else: self.PFD.dataInput.stopMagCal()
+        elif (evt_ID == 202):
+            self.PFD.dataInput.doAirspeedCal()
+        elif (evt_ID == 203):
+            self.PFD.dataInput.doBaroCal()
+        elif (evt_ID == 204):
+            self.PFD.dataInput.doTrimValCal()
 
     def OnLogClick(self, evt):
         if (evt.IsChecked()): self.PFD.dataInput.startLogging()

@@ -142,10 +142,12 @@ class PrimaryFlightDisplay(wx.Panel):
 
     ### Actually draw things here!! ###
     def OnAttitudePaint(self):
+        rollRotation = self.dataInput.data["roll"]
+
         glClear(GL_COLOR_BUFFER_BIT)
         self.GoToOrigin()
         # Rotate, and then Translate. That's what I want! #
-        glRotatef(self.dataInput.data["roll"],0,0,1)
+        glRotatef(rollRotation,0,0,1)
         # Translate along the "rotated direction"
         glTranslatef(0, self.dataInput.data["pitch"]*self.pixelsPerPitch,
                      0) 
@@ -200,7 +202,7 @@ class PrimaryFlightDisplay(wx.Panel):
                 self.GoToOrigin(True)
 
                 glTranslatef(centerX, centerY, 0)
-                glRotatef(-self.dataInput.data["roll"],0,0,1)
+                glRotatef(-rollRotation,0,0,1)
                 glTranslatef(0, -self.dataInput.data["pitch"]*self.pixelsPerPitch,0) 
                 glTranslatef(length+30, height-5, 0)
                 self.myFont.glPrint(0, 0, "%d"%drawDeg)
@@ -259,7 +261,7 @@ class PrimaryFlightDisplay(wx.Panel):
         
         # Draw the roll indicator
         glPushMatrix()
-        glRotatef(self.dataInput.data["roll"],0,0,1)
+        glRotatef(rollRotation,0,0,1)
         ringInner = 253
         ringOuter = 255
         #gluPartialDisk(self.quadric, ringInner, ringOuter, 20, 5, 120, 120)
