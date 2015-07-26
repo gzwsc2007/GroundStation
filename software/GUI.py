@@ -189,10 +189,22 @@ class GroundStationGUI(wx.Frame):
         CalMenu.Append(203, "Altimeter Cal", "Perform altimeter zero calibration", wx.ITEM_NORMAL)
         CalMenu.Append(204, "Trim Value Cal", "Remember the current trim values on Aileron, Elevator and Rudder", wx.ITEM_NORMAL)
 
+        # System Identification menu
+        SysidMenu = wx.Menu()
+        SysidMenu.Append(301, "Start/Stop manual", "Start or Stop manual (free-running) system id mode", wx.ITEM_CHECK)
+        SysidMenu.Append(302, "Aileron mode (LF)", "Start experiment sequence on the aileron control surface (low frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(303, "Aileron mode (HF)", "Start experiment sequence on the aileron control surface (high frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(304, "Elevator mode (LF)", "Start experiment sequence on the elevator control surface (low frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(305, "Elevator mode (HF)", "Start experiment sequence on the elevator control surface (high frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(306, "Rudder mode (LF)", "Start experiment sequence on the rudder control surface (low frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(307, "Rudder mode (HF)", "Start experiment sequence on the rudder control surface (high frequency)", wx.ITEM_NORMAL)
+        SysidMenu.Append(308, "Reset modes", "Reset local system mode to MANUAL", wx.ITEM_NORMAL)
+
         # Creating the menu bar
         menuBar = wx.MenuBar() # The visible menu bar
         menuBar.Append(LogMenu, "&Log")
         menuBar.Append(CalMenu, "&Calibration")
+        menuBar.Append(SysidMenu, "&SystemIdent")
 
         self.SetMenuBar(menuBar)
 
@@ -255,10 +267,20 @@ class GroundStationGUI(wx.Frame):
 
         # bind menu items
         self.Bind(wx.EVT_MENU, self.OnLogClick, id=101)
+
         self.Bind(wx.EVT_MENU, self.OnCalClick, id=201)
         self.Bind(wx.EVT_MENU, self.OnCalClick, id=202)
         self.Bind(wx.EVT_MENU, self.OnCalClick, id=203)
         self.Bind(wx.EVT_MENU, self.OnCalClick, id=204)
+
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=301)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=302)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=303)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=304)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=305)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=306)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=307)
+        self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=308)
 
         # sizers for overall layout
         v2sizer = wx.BoxSizer(wx.VERTICAL)
@@ -294,6 +316,27 @@ class GroundStationGUI(wx.Frame):
     def OnLogClick(self, evt):
         if (evt.IsChecked()): self.PFD.dataInput.startLogging()
         else: self.PFD.dataInput.stopLogging()
+
+    def OnSysIdClick(self, evt):
+        evt_ID = evt.GetId()
+
+        if (evt_ID == 301):
+            if (evt.IsChecked()): self.PFD.dataInput.startSysIdManual()
+            else: self.PFD.dataInput.stopSysIdManual()
+        elif (evt_ID == 302):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_LOWER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_AILERON)
+        elif (evt_ID == 303):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_HIGHER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_AILERON)
+        elif (evt_ID == 304):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_LOWER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_ELEVATOR)
+        elif (evt_ID == 305):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_HIGHER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_ELEVATOR)
+        elif (evt_ID == 306):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_LOWER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_RUDDER)
+        elif (evt_ID == 307):
+            self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_HIGHER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_RUDDER)
+        elif (evt_ID == 308):
+            self.PFD.dataInput.HACS_mode = AbstractModel.HACS_Proxy.HACS_MODE_MANUAL
 
     def OnSpin(self, evt):
         evt_ID = evt.GetId()

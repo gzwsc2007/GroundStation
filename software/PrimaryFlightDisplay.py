@@ -333,6 +333,13 @@ class PrimaryFlightDisplay(wx.Panel):
         drawRect(40, -4, 48, (right+40)/10) # draw left vertical bar
         drawRectNoOutline(40,-4,right,4,(0,0,0))
         drawRect(-5,-5,5,5)     # draw center dot
+
+        #### Draw HACS mode text ####
+        #drawRect(self.hwidth-self.windowHorzOffset-120, -self.hheight+self.windowOffset+10, self.hwidth-self.windowHorzOffset-20, -self.hheight+self.windowOffset+50)
+        self.GoToOrigin(True)
+        glTranslatef(self.hwidth-40, self.hheight + 310, 0)
+        glColor3f(1.0, 1.0, 1.0)
+        self.myFont.glPrint(0,0, self.dataInput.getModeText())
         
     def OnCompassPaint(self):
         self.GoToOrigin()

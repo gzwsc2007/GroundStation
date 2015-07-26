@@ -12,6 +12,7 @@ import copy
 import MAVLink.MAVLink as MAVLink
 import MagCalibrator
 import binascii
+import csv
 
 # Singleton instance of the magnetometer calibration handler
 MagCalSingleton = MagCalibrator.MagCalibrator()
@@ -22,12 +23,22 @@ class HACS_Proxy(object):
     HACS_GND_CMD_CALIBRATE_AIRSPEED = 2
     HACS_GND_CMD_CALIBRATE_BAROMETER = 3
     HACS_GND_CMD_CALIBRATE_TRIM_VALUES = 4
+    HACS_GND_CMD_SET_SYSID_MODE = 5
+    HACS_GND_CMD_SET_SYSID_FREQ = 6
 
     HACS_MODE_MANUAL = 0
     HACS_MODE_MANUAL_WITH_SAS = 1
     HACS_MODE_AUTOPILOT = 2
     HACS_MODE_SYSTEM_IDENTIFICATION = 3
     HACS_MODE_MAG_CAL = 4
+
+    HACS_SYSID_MODE_MANUAL = 0
+    HACS_SYSID_MODE_AILERON = 1
+    HACS_SYSID_MODE_ELEVATOR = 2
+    HACS_SYSID_MODE_RUDDER = 3
+
+    HACS_SYSID_FREQ_LOWER = 0
+    HACS_SYSID_FREQ_HIGHER = 1
 
 class FakeWriter(object):
     def __init__(self, com):
@@ -113,6 +124,8 @@ class DataInput(object):
         self.first25HzSample = True
         self.exitFlag = False
         self.logEnable = False
+
+        self.HACS_mode = HACS_Proxy.HACS_MODE_MANUAL
 
         thread = myThread(self, self.mavlink)
         thread.start()
@@ -301,12 +314,88 @@ class DataInput(object):
         print "dude"
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_CALIBRATE_TRIM_VALUES, 0)
 
+    def startSysIdManual(self):
+        if (self.HACS_mode != HACS_Proxy.HACS_MODE_MANUAL): # sanity check
+            return
+
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_MODE, HACS_Proxy.HACS_SYSID_MODE_MANUAL)
+        time.sleep(0.4)
+        self._onSystemIdStart(0xFF, HACS_Proxy.HACS_SYSID_MODE_MANUAL)
+        
+    def stopSysIdManual(self):
+        if (self.HACS_mode != HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION): # sanity check
+            return
+
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_MANUAL)
+        self.HACS_mode = HACS_Proxy.HACS_MODE_MANUAL
+
+    def startSysIdExperiment(self, freq_range, mode):
+        if (self.HACS_mode != HACS_Proxy.HACS_MODE_MANUAL): # sanity check
+            return
+        print "experiment start "+str(freq_range)+" "+str(mode)
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_FREQ, freq_range)
+        time.sleep(0.4)
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_MODE, mode)
+        time.sleep(0.4)
+        self._onSystemIdStart(freq_range, mode)
+
+    def _onSystemIdStart(self, freq_range, mode):
+        if (freq_range == HACS_Proxy.HACS_SYSID_FREQ_LOWER):
+            freq_str = "LF"
+        elif (freq_range == HACS_Proxy.HACS_SYSID_FREQ_HIGHER):
+            freq_str = "HF"
+        else:
+            freq_str = "NA"
+
+        if (mode == HACS_Proxy.HACS_SYSID_MODE_MANUAL):
+            mode_str = "man"
+        elif (mode == HACS_Proxy.HACS_SYSID_MODE_AILERON):
+            mode_str = "aile"
+        elif (mode == HACS_Proxy.HACS_SYSID_MODE_ELEVATOR):
+            mode_str = "elev"
+        elif (mode == HACS_Proxy.HACS_SYSID_MODE_RUDDER):
+            mode_str = "rudd"
+        else:
+            mode_str = "NA"
+
+        # Prepare a new log file for writing
+        self.sysid_csv_writer = csv.writer(open("../flight_log/sysid_%s_%s_%s.csv"%(time.strftime("%Y-%m-%d_%H_%M_%S"),freq_str,mode_str), "wb"), delimiter=',')
+
+        # Start the experiment
+        self.HACS_mode = HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION
+        self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION)
+
+    def onNewSysIdSample(self, msg):
+        time = msg.timestamp / 1000.0 # in seconds
+        u_a = msg.u_a
+        u_e = msg.u_e
+        u_r = msg.u_r
+        ax = msg.ax / 100.0 # in g
+        ay = msg.ay / 100.0 # in g
+        az = msg.az / 100.0 # in g
+        roll = msg.roll / 100.0 # in deg
+        pitch = msg.pitch / 100.0 # in deg
+        yaw = msg.yaw / 100.0 # in deg
+        p = msg.p / 10.0 # in deg/s
+        q = msg.q / 10.0 # in deg/s
+        r = msg.r / 10.0 # in deg/s
+
+        self.sysid_csv_writer.writerow([str(time), str(u_a), str(u_e), str(u_r), str(ax), str(ay), str(az), str(roll), str(pitch), str(yaw), str(p), str(q), str(r)])
+
     def doLog(self):
         if (self.logEnable):
             tnow = time.time()
             if (tnow - self.lastLogTime >= 0.05):
                 self.logList.append((tnow, copy.deepcopy(self.data)))
                 self.lastLogTime = tnow
+
+    def getModeText(self):
+        if self.HACS_mode == HACS_Proxy.HACS_MODE_MANUAL: return "MANUAL"
+        elif self.HACS_mode == HACS_Proxy.HACS_MODE_AUTOPILOT: return "AUTO"
+        elif self.HACS_mode == HACS_Proxy.HACS_MODE_MANUAL_WITH_SAS: return "SAS"
+        elif self.HACS_mode == HACS_Proxy.HACS_MODE_MAG_CAL: return "CAL"
+        elif self.HACS_mode == HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION: return "SYSID"
+        else: return ""
 
 class myThread(threading.Thread):
     def __init__(self,parent,mavlink):
@@ -347,11 +436,12 @@ class myThread(threading.Thread):
     def run(self):
 #        tLast = time.time()
         while(not self.parent.exitFlag):
+'''         
             # uncomment the following to enable simulation
-            #time.sleep(0.04)
-            #self.parent.simulateInputs()
-            #self.parent.updateBeacons()
-
+            time.sleep(0.04)
+            self.parent.simulateInputs()
+            self.parent.updateBeacons()
+'''
             n = self.parent.COM.inWaiting()
             if(n != 0):
                 bytes = self.parent.COM.read(n)
@@ -371,6 +461,12 @@ class myThread(threading.Thread):
                             self.parent.updateBeacons()
                         elif (isinstance(msg, MAVLink.MAVLink_magcal_message)):
                             MagCalSingleton.onNewSample(msg.mx,msg.my,msg.mz)
+                        elif (isinstance(msg, MAVLink.MAVLink_systemid_message)):
+                            self.parent.onNewSysIdSample(msg)
+                        elif (isinstance(msg, MAVLink.MAVLink_syscmd_message)):
+                            if (msg.cmd == HACS_Proxy.HACS_GND_CMD_GET_MODE):
+                                self.parent.HACS_mode = msg.payload
+                                print "mode" + str(self.parent.HACS_mode)
             else:
                 time.sleep(0.025)
 
