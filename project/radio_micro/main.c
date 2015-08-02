@@ -82,6 +82,10 @@ sbit COM_LED = P3^4;
 sfr AUXR = 0X8E;
 
 uchar rece_buf[32];
+uchar rece_buf2[32];
+uchar tx_len = 0;
+uchar *current_buf = rece_buf;
+uchar *other_buf = rece_buf2;
 
 void delay_us(uchar num)
 {
@@ -341,14 +345,18 @@ void NRF24L01_RT_Init(void)
 void main()
 {
 	uchar i=0;
-	uchar len=0; 
+	uchar len=0;
 	uchar readAgain = 0;
-//	code uchar ack_buf[4] = {'a','c','k',0};
+	uchar *ptr;
 	COM_LED = 0;
  	serial_open();
 	while(NRF24L01_Check()); // 等待检测到NRF24L01，程序才会向下执行
 	NRF24L01_RT_Init();
     COM_LED = 1;
+
+	// Enable serial interrupt to handle RX
+	ES = 1;
+	EA = 1;
 
 	while(1)
 	{
@@ -356,7 +364,7 @@ void main()
 		{
 			len = 0;
 			readAgain = 0;
-			while(NRF24L01_RxPacket(rece_buf, &readAgain, &len) != 1)
+			while(NRF24L01_RxPacket(other_buf, &readAgain, &len) != 1)
 			{
 				COM_LED = !COM_LED;
 				
@@ -366,27 +374,38 @@ void main()
 
 				for (i = 0; i < len; i++)
 				{
-					ES = 0;
 					TI = 0;	
-					SBUF = rece_buf[i];
+					SBUF = other_buf[i];
 					while(!TI);
-					TI = 0;
-					ES = 1;
 				}
+				TI = 0;
 				
 				if (readAgain == 0) break;
 				len = 0;
 			}
 
-//			NRF24L01_Write_Buf(W_ACK_PAYLOAD, ack_buf, 4);
-		}
+			// Upload ACK payload
+		 	if(tx_len > 0) {
+				// Switch to the other rece_buf in a critical section
+				EA = 0;
+				ptr = current_buf;
+				len = tx_len;
+				if (current_buf == rece_buf) {
+					current_buf = rece_buf2;
+					other_buf = rece_buf;
+				} else {
+					current_buf = rece_buf;
+					other_buf = rece_buf2;
+				}
+				tx_len = 0;
+				EA = 1;
 
-		if(WaitComm(&len) == 0) { // len is gauranteed to be <= 32 by the WaitComm function
-			// We've got data from the PC. Put the data as ACK payload
-			// into the TX FIFO.
-			// Note: Flow control should be done by the PC. Basically, the PC
-			// should only send out a new packet per packet it receives.
-			NRF24L01_Write_Buf(W_ACK_PAYLOAD, rece_buf, len);
+				// We've got data from the PC. Put the data as ACK payload
+				// into the TX FIFO.
+				// Note: Flow control should be done by the PC. Basically, the PC
+				// should only send out a new packet per packet it receives.
+				NRF24L01_Write_Buf(W_ACK_PAYLOAD, ptr, len);
+			}
 		}
 
 		/*
@@ -405,5 +424,14 @@ void main()
 	}
 }
 
-
+void SerialISR(void) interrupt 4
+{
+	if(RI) {
+		RI = 0;
+		current_buf[tx_len++] = SBUF;
+		if (tx_len >= 31) {
+			tx_len = 31;
+		}
+	}
+}
 
