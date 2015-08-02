@@ -7,6 +7,8 @@ from wx import glcanvas
 import glFreeType
 import math
 
+HEADING_SETPOINT = 95
+
 # draw a rotated line. (Mainly used to draw markings on the roll ring)
         # rotateDeg - degree
         # lineStart - pixel
@@ -142,7 +144,7 @@ class PrimaryFlightDisplay(wx.Panel):
 
     ### Actually draw things here!! ###
     def OnAttitudePaint(self):
-        rollRotation = self.dataInput.data["roll"]
+        rollRotation = -self.dataInput.data["roll"]
 
         glClear(GL_COLOR_BUFFER_BIT)
         self.GoToOrigin()
@@ -360,10 +362,22 @@ class PrimaryFlightDisplay(wx.Panel):
         glColor3f(1,1,1)
         degText = 0
         for deg in xrange(0, 360, 10):
+            if (deg == HEADING_SETPOINT):
+                glColor3f(1,0,1)
+                glLineWidth(10)
             drawRotatedLine(180+deg, ringOuter-17, ringOuter)
+            if (deg == HEADING_SETPOINT):
+                glColor3f(1,1,1)
+                glLineWidth(2)
             
         for deg in xrange(0, 360, 10):
+            if (deg+5 == HEADING_SETPOINT):
+                glColor3f(1,0,1)
+                glLineWidth(10)
             drawRotatedLine(185+deg, ringOuter-10, ringOuter)
+            if (deg+5 == HEADING_SETPOINT):
+                glColor3f(1,1,1)
+                glLineWidth(2)
         
         # prepare to draw compass digits
         self.GoToOrigin(True)

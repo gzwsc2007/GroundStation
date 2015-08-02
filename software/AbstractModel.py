@@ -436,12 +436,11 @@ class myThread(threading.Thread):
     def run(self):
 #        tLast = time.time()
         while(not self.parent.exitFlag):
-'''         
             # uncomment the following to enable simulation
-            time.sleep(0.04)
-            self.parent.simulateInputs()
-            self.parent.updateBeacons()
-'''
+#            time.sleep(0.04)
+#            self.parent.simulateInputs()
+#            self.parent.updateBeacons()
+
             n = self.parent.COM.inWaiting()
             if(n != 0):
                 bytes = self.parent.COM.read(n)
