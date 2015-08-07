@@ -26,6 +26,7 @@ class HACS_Proxy(object):
     HACS_GND_CMD_SET_SYSID_MODE = 5
     HACS_GND_CMD_SET_SYSID_FREQ = 6
     HACS_GND_CMD_TELEM_TEST = 7
+    HACS_GND_CMD_SET_THROT_MODE = 8
 
     HACS_MODE_MANUAL = 0
     HACS_MODE_MANUAL_WITH_SAS = 1
@@ -40,6 +41,9 @@ class HACS_Proxy(object):
 
     HACS_SYSID_FREQ_LOWER = 0
     HACS_SYSID_FREQ_HIGHER = 1
+
+    HACS_THROTTLE_MODE_UNLOCKED = 0
+    HACS_THROTTLE_MODE_LOCKED = 1
 
 class FakeWriter(object):
     def __init__(self, com):
@@ -166,7 +170,10 @@ class DataInput(object):
         yawTemp = PFDStruct.yaw # in 0.01 deg
         altitudeTemp = PFDStruct.altitude / 10.0
         airspeedTemp = PFDStruct.airspeed
-        currTemp = PFDStruct.battI / 10.0
+        currTemp = PFDStruct.battI / 100.0
+
+        if (currTemp < 0):
+            currTemp = 0
 
         # apply local Low-Pass-Filter if necessary
         if (self.LPF):
@@ -204,7 +211,7 @@ class DataInput(object):
         self.data["battI"] = currTemp
 
         tnow = time.time()
-        self.data["mAh"] += currTemp * (tnow - self.timeLast) * 0.2777778
+        #self.data["mAh"] += currTemp * (tnow - self.timeLast) * 0.2777778
         if tnow != self.timeLast:
             vsTemp = (altitudeTemp - self.altitude_last) / (tnow - self.timeLast)
             if abs(vsTemp - self.vs_last) > 2: vsTemp *= 0.1
@@ -288,7 +295,7 @@ class DataInput(object):
         print "stop logging. List length: ",
         print len(self.logList)
         self.logEnable = False
-        f = open("log_%s.pkl"%time.strftime("%Y-%m-%d_%H_%M_%S"), "w+")
+        f = open("../flight_log/log_%s.pkl"%time.strftime("%Y-%m-%d_%H_%M_%S"), "w+")
         pickle.dump(self.logList, f)
 
     def startMagCal(self):
@@ -320,7 +327,7 @@ class DataInput(object):
             return
 
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_MODE, HACS_Proxy.HACS_SYSID_MODE_MANUAL)
-        time.sleep(0.4)
+        time.sleep(0.1)
         self._onSystemIdStart(0xFF, HACS_Proxy.HACS_SYSID_MODE_MANUAL)
         
     def stopSysIdManual(self):
@@ -335,9 +342,9 @@ class DataInput(object):
             return
         print "experiment start "+str(freq_range)+" "+str(mode)
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_FREQ, freq_range)
-        time.sleep(0.4)
+        time.sleep(0.1)
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_SYSID_MODE, mode)
-        time.sleep(0.4)
+        time.sleep(0.1)
         self._onSystemIdStart(freq_range, mode)
 
     def _onSystemIdStart(self, freq_range, mode):
@@ -365,6 +372,12 @@ class DataInput(object):
         # Start the experiment
         self.HACS_mode = HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION
         self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_MODE, HACS_Proxy.HACS_MODE_SYSTEM_IDENTIFICATION)
+
+    def lockThrottle(self, is_lock):
+        if (is_lock):
+            self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_THROT_MODE, HACS_Proxy.HACS_THROTTLE_MODE_LOCKED)
+        else:
+            self.mavlink.syscmd_send(HACS_Proxy.HACS_GND_CMD_SET_THROT_MODE, HACS_Proxy.HACS_THROTTLE_MODE_UNLOCKED)
 
     def onNewSysIdSample(self, msg):
         time = msg.timestamp / 1000.0 # in seconds

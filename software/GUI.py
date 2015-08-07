@@ -200,11 +200,16 @@ class GroundStationGUI(wx.Frame):
         SysidMenu.Append(307, "Rudder mode (HF)", "Start experiment sequence on the rudder control surface (high frequency)", wx.ITEM_NORMAL)
         SysidMenu.Append(308, "Reset modes", "Reset local system mode to MANUAL", wx.ITEM_NORMAL)
 
+        # Control menu
+        ControlMenu = wx.Menu()
+        ControlMenu.Append(401, "Lock/Unlock throttle", "Lock (when selected) and unlock throttle under manual mode", wx.ITEM_CHECK)
+
         # Creating the menu bar
         menuBar = wx.MenuBar() # The visible menu bar
         menuBar.Append(LogMenu, "&Log")
         menuBar.Append(CalMenu, "&Calibration")
         menuBar.Append(SysidMenu, "&SystemIdent")
+        menuBar.Append(ControlMenu, "Control")
 
         self.SetMenuBar(menuBar)
 
@@ -282,6 +287,8 @@ class GroundStationGUI(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=307)
         self.Bind(wx.EVT_MENU, self.OnSysIdClick, id=308)
 
+        self.Bind(wx.EVT_MENU, self.OnControlClick, id=401)
+
         # sizers for overall layout
         v2sizer = wx.BoxSizer(wx.VERTICAL)
         v2sizer.Add(boxNDSizer, 0, wx.ALL, border=5)
@@ -337,6 +344,13 @@ class GroundStationGUI(wx.Frame):
             self.PFD.dataInput.startSysIdExperiment(AbstractModel.HACS_Proxy.HACS_SYSID_FREQ_HIGHER, AbstractModel.HACS_Proxy.HACS_SYSID_MODE_RUDDER)
         elif (evt_ID == 308):
             self.PFD.dataInput.HACS_mode = AbstractModel.HACS_Proxy.HACS_MODE_MANUAL
+
+    def OnControlClick(self, evt):
+        evt_ID = evt.GetId()
+
+        if (evt_ID == 401):
+            if (evt.IsChecked()): self.PFD.dataInput.lockThrottle(True)
+            else: self.PFD.dataInput.lockThrottle(False)
 
     def OnSpin(self, evt):
         evt_ID = evt.GetId()
