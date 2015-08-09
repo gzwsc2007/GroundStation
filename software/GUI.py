@@ -11,6 +11,7 @@ import glFreeType
 
 import PrimaryFlightDisplay
 import NavigationDisplay
+import AltimeterPlot
 
 # names for the ND scale choices
 ND_SCALE_CHOICE_LIST = ["30 m/div", "50 m/div", "100 m/div", "200 m/div", "500 m/div"]
@@ -85,11 +86,11 @@ class AuxiliaryDisplay(wx.Panel):
         vsizer.Add(hsizer3, 0, wx.ALL, border=0)
 
         #### Sizers ####
-        hsizer = wx.BoxSizer(wx.HORIZONTAL)
-        hsizer.Add(self.crtMeter, 0, wx.ALL, border=10)
-        hsizer.Add(self.mAhIndicator, 0, wx.ALL, border=10)
-        hsizer.Add(vsizer, 0, wx.TOP | wx.LEFT, border=25)
-        self.SetSizer(hsizer)
+        topSizer = wx.BoxSizer(wx.HORIZONTAL)
+        topSizer.Add(self.crtMeter, 0, wx.ALL, border=10)
+        topSizer.Add(self.mAhIndicator, 0, wx.ALL, border=5)
+        topSizer.Add(vsizer, 0, wx.TOP | wx.LEFT, border=25)
+        self.SetSizer(topSizer)
         self.Fit()
 
     def initCurrentMeter(self):
@@ -232,6 +233,14 @@ class GroundStationGUI(wx.Frame):
         spinControl.SetRange(-360,360)
         spinControl.SetValue(0)
 
+        altGreenRefSpin = wx.SpinCtrl(bgPanel, 2, "AltGreenRef")
+        altGreenRefSpin.SetRange(0,2000)
+        altGreenRefSpin.SetValue(100)
+
+        altRedRefSpin = wx.SpinCtrl(bgPanel, 3, "AltRedRef")
+        altRedRefSpin.SetRange(0,2000)
+        altRedRefSpin.SetValue(50)
+
         # create a custom panel for Primary Flight Display
         self.PFD = PrimaryFlightDisplay.PrimaryFlightDisplay(bgPanel,
                                         size=(800,850),
@@ -242,8 +251,11 @@ class GroundStationGUI(wx.Frame):
         boxPFDSizer.Add(self.PFD, 0, wx.EXPAND|wx.ALL, border=5)
 
         # create a custom panel for Auxilary readings Display
-        self.AD = AuxiliaryDisplay(bgPanel, size=(800,100), style=wx.SIMPLE_BORDER,
+        self.AD = AuxiliaryDisplay(bgPanel, size=(600,100), style=wx.SIMPLE_BORDER,
                                    dataInput=dataInput)
+#        boxAD = wx.StaticBox(bgPanel, -1, "Auxilary Display", size=(100,600))
+#        boxADSizer = wx.StaticBoxSizer(boxAD, wx.VERTICAL)
+#        boxADSizer.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=5)
 
         # create a custom panel for Navigation Display
         self.ND = NavigationDisplay.NavigationDisplay(bgPanel, size=(700,600),
@@ -261,7 +273,19 @@ class GroundStationGUI(wx.Frame):
         hbtnSizer.Add(spinControl, 0, wx.ALL, border=5)
 
         boxNDSizer.Add(hbtnSizer, 0, wx.ALL, border=0)
-        boxNDSizer.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=5)
+#        boxNDSizer.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=5)
+
+        # create a custom panel for altitude plot
+        self.AltPlot = AltimeterPlot.AltimeterPlot(bgPanel, size=(150, 800),
+                                                   style=wx.SIMPLE_BORDER)
+        boxAP = wx.StaticBox(bgPanel, -1, "Altitude Log", size=(150,800))
+        boxAPSizer = wx.StaticBoxSizer(boxAP, wx.VERTICAL)
+        boxAPSizer.Add(self.AltPlot, 0, wx.EXPAND|wx.ALL, border=5)
+
+        hbtnSizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        hbtnSizer2.Add(altRedRefSpin, 0, wx.ALL, border=5)
+        hbtnSizer2.Add(altGreenRefSpin, 0, wx.ALL, border=5)
+        boxAPSizer.Add(hbtnSizer2, 0, wx.ALL, border=0)
 
         self.Bind(wx.EVT_BUTTON, self.OnClick, buttonAltReset)
         self.Bind(wx.EVT_BUTTON, self.OnClick, buttonAspdReset)
@@ -269,6 +293,8 @@ class GroundStationGUI(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_CHOICE, self.OnChoice, scaleChoice)
         self.Bind(wx.EVT_SPINCTRL, self.OnSpin, spinControl)
+        self.Bind(wx.EVT_SPINCTRL, self.OnSpin, altRedRefSpin)
+        self.Bind(wx.EVT_SPINCTRL, self.OnSpin, altGreenRefSpin)
 
         # bind menu items
         self.Bind(wx.EVT_MENU, self.OnLogClick, id=101)
@@ -289,12 +315,19 @@ class GroundStationGUI(wx.Frame):
 
         self.Bind(wx.EVT_MENU, self.OnControlClick, id=401)
 
+        # sizer for ND and AD and altimeterPlot
+        vsizerInt1 = wx.BoxSizer(wx.VERTICAL)
+        vsizerInt1.Add(boxNDSizer, 0, wx.ALL, border=0)
+        vsizerInt1.Add(self.AD, 0, wx.EXPAND|wx.ALL, border=0)
+
+        vsizerInt2 = wx.BoxSizer(wx.VERTICAL)
+        vsizerInt2.Add(boxAPSizer, 0, wx.ALL, border=0)
+
         # sizers for overall layout
-        v2sizer = wx.BoxSizer(wx.VERTICAL)
-        v2sizer.Add(boxNDSizer, 0, wx.ALL, border=5)
         hsizer = wx.BoxSizer(wx.HORIZONTAL)
         hsizer.Add(boxPFDSizer, 0, wx.ALL, border=5) # Set border width between ND and PFD
-        hsizer.Add(v2sizer, 0, wx.ALL, border=5)
+        hsizer.Add(vsizerInt1, 0, wx.ALL, border=5)
+        hsizer.Add(vsizerInt2, 0, wx.ALL, border=5)
 
         # Auto size the frame and show
         bgPanel.SetSizer(hsizer)
@@ -305,7 +338,7 @@ class GroundStationGUI(wx.Frame):
         # set off the timer
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.OnTimer, self.timer)
-        self.timer.Start(30) # ms
+        self.timer.Start(40) # ms
 
     def OnCalClick(self, evt):
         evt_ID = evt.GetId()
@@ -355,12 +388,16 @@ class GroundStationGUI(wx.Frame):
     def OnSpin(self, evt):
         evt_ID = evt.GetId()
         obj = evt.GetEventObject()
+        val = obj.GetValue()
 
         if (evt_ID == 1): # select HOME bearing
-            val = obj.GetValue()
             val = (val + 360) % 360
             self.PFD.dataInput.homeBearing = val
             obj.SetValue(val)
+        elif (evt_ID == 2): # altitude green ref
+            self.AltPlot.setGreenRefAltitude(val)
+        elif (evt_ID == 3): # altitude red ref
+            self.AltPlot.setRedRefAltitude(val)
 
     def OnChoice(self, evt):
         evt_ID = evt.GetId()
@@ -387,6 +424,8 @@ class GroundStationGUI(wx.Frame):
             self.AD.volText.SetForegroundColour(wx.RED)
         else:
             self.AD.volText.SetForegroundColour(wx.GREEN)
+        # update altimeter plot
+        self.AltPlot.addDataPoint(self.PFD.dataInput.data["altitude"])
 
     def OnClick(self, event):
         id = event.GetId()
