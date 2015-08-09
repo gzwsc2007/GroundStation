@@ -14,6 +14,8 @@ import MagCalibrator
 import binascii
 import csv
 
+SIMULATION_MODE = True
+
 # Singleton instance of the magnetometer calibration handler
 MagCalSingleton = MagCalibrator.MagCalibrator()
 
@@ -104,9 +106,12 @@ class DataInput(object):
         self.rollRight = True
         self.speedUp = True
 
-        # initialize Serial com
-        self.COM = serial.Serial(1,115200*2) # COM2
-        self.COM.flushInput() # flush input buffer
+        if (not SIMULATION_MODE):
+            # initialize Serial com
+            self.COM = serial.Serial(1,115200*2) # COM2
+            self.COM.flushInput() # flush input buffer
+        else:
+            self.COM = open('dummy.txt','w')
 
         # initialize MAVLink protocol
         self.mavlink = MAVLink.MAVLink(FakeWriter(self.COM))
@@ -278,8 +283,8 @@ class DataInput(object):
                 self.speedUp = True
 
         self.data["groundspeed"] = self.data["battI"]
-        self.data["altitude"] += 1
-        self.data["airspeed"] += 0.1
+        self.data["altitude"] = 52 * math.sin(time.time()) + 50
+        self.data["airspeed"] = 10 * math.sin(time.time()) + 10
 
         self.data["latitude"] += 0.000001
         #self.data["longitude"] += 0.0000005
@@ -450,10 +455,11 @@ class myThread(threading.Thread):
     def run(self):
 #        tLast = time.time()
         while(not self.parent.exitFlag):
-            # uncomment the following to enable simulation
-#            time.sleep(0.04)
-#            self.parent.simulateInputs()
-#            self.parent.updateBeacons()
+            if (SIMULATION_MODE):
+                time.sleep(0.04)
+                self.parent.simulateInputs()
+                self.parent.updateBeacons()
+                continue
 
             n = self.parent.COM.inWaiting()
             if(n != 0):
